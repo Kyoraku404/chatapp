@@ -1,0 +1,30 @@
+import type { Metadata, Viewport } from "next";
+import "./globals.css";
+import { ThemeProvider } from "@/components/ThemeProvider";
+
+export const viewport: Viewport = { width: 'device-width', initialScale: 1, viewportFit: 'cover', interactiveWidget: 'resizes-content' };
+
+export const metadata: Metadata = {
+  title: "RUSH by OCN — Your people. Your conversations. One place.",
+  description:
+    "RUSH is a fast, alive, social communication app: direct chats, groups, and spaces with channels. By OCN.",
+};
+
+// Pre-paint theme bootstrap: reads localStorage `rush-theme` and sets
+// <html data-theme> + a matching background BEFORE first paint, so a saved
+// dark theme never flashes Ember. Falls back to Ember on any failure.
+// Also sets color-scheme so scrollbars/form controls match immediately.
+const THEME_BOOTSTRAP = `(function(){try{var t=localStorage.getItem("rush-theme");if(t!=="carbon-green"&&t!=="carbon-pink"&&t!=="dark-samurai"){t="ember"}var h=document.documentElement;h.dataset.theme=t;var dark=t!=="ember";h.style.colorScheme=(dark?"dark":"light");h.style.backgroundColor=(t==="ember"?"#FAF8F5":t==="dark-samurai"?"#100F14":"#121516")}catch(e){}})();`;
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en" data-theme="ember" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP }} />
+      </head>
+      <body className="font-sans">
+        <ThemeProvider>{children}</ThemeProvider>
+      </body>
+    </html>
+  );
+}

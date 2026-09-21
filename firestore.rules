@@ -1,0 +1,252 @@
+rules_version = '2';
+// RUSH Firestore rules — production-minded.
+// Principles:
+//  - Private conversations are only readable by participants/members.
+//  - DM conversations are created/published by POST /api/dm/open,
+//    POST /api/dm/send, and POST /api/dm/backfill (Admin SDK:
+//    session-verified, block-checked, deterministic sorted id) — never
+//    client-direct, so a blocked user cannot forge a DM around the block.
+//  - No self-granted roles; membership writes go through Admin SDK.
+//  - Block edges use deterministic doc ids {blocker}_{blocked} so message
+//    rules can enforce "no writes across a block".
+//  - Message edit/delete ownership enforced here AND server-side.
+//  - Usernames are immutable after reservation (Admin SDK transaction).
+//  - Space owners always retain read/manage access (no lockout when the
+//    owner membership doc has not been created yet).
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function uid() { return request.auth.uid; }
+    function displayNameOk(data) {
+      return data.displayName is string
+        && data.displayName.size() >= 1
+        && data.displayName.size() <= 40;
+    }
+    function bioOk(data) {
+      return !('bio' in data)
+        || (data.bio is string && data.bio.size() <= 160);
+    }
+    // Free-tier avatar URLs only: https:// (http://localhost for dev),
+    // max 2048 chars. No base64/data: payloads, no binary in Firestore.
+    function avatarUrlOk(data) {
+      return !('avatarUrl' in data)
+        || data.avatarUrl == null
+        || (data.avatarUrl is string
+          && data.avatarUrl.size() <= 2048
+          && (data.avatarUrl.matches('^https://.+')
+            || data.avatarUrl.matches('^http://localhost.*')
+            || data.avatarUrl.matches('^http://127\\.0\\.0\\.1.*')));
+    }
+
+    // Shared message-update guard: sender-only, no resurrection of deleted
+    // messages, no blanking via edit (empty content allowed only together
+    // with a fresh soft-delete, which is what deleteOwnMessage writes).
+    function validMessageUpdate() {
+      return resource.data.senderId == uid()
+        && resource.data.get('deletedAt', null) == null
+        && request.resource.data.senderId == resource.data.senderId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['content', 'editedAt', 'deletedAt', 'mentions'])
+        && request.resource.data.content is string
+        && request.resource.data.content.size() <= 4000
+        && (request.resource.data.content.size() > 0
+          || request.resource.data.get('deletedAt', null) != null);
+    }
+    function validNewMessage() {
+      return request.resource.data.senderId == uid()
+        && request.resource.data.content is string
+        && request.resource.data.content.size() > 0
+        && request.resource.data.content.size() <= 4000;
+    }
+
+    // ---------- Users ----------
+    match /users/{userId} {
+      // Public profile readable by any signed-in user (needed to find people).
+      allow read: if signedIn();
+      // Own profile create only. username must equal usernameLower (all
+      // valid usernames are lowercase; the Admin reservation API enforces
+      // normalization + uniqueness transactionally).
+      allow create: if signedIn() && uid() == userId
+        && request.resource.data.uid == uid()
+        && request.resource.data.username is string
+        && request.resource.data.usernameLower is string
+        && request.resource.data.username == request.resource.data.usernameLower
+        && displayNameOk(request.resource.data)
+        && bioOk(request.resource.data)
+        && avatarUrlOk(request.resource.data);
+      // Own profile update only; uid/username/usernameLower immutable.
+      allow update: if signedIn() && uid() == userId
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.username == resource.data.username
+        && request.resource.data.usernameLower == resource.data.usernameLower
+        && displayNameOk(request.resource.data)
+        && bioOk(request.resource.data)
+        && avatarUrlOk(request.resource.data);
+      allow delete: if false;
+
+      // Private per-user data (settings, block list edges readable by owner).
+      match /private/{docId} {
+        allow read, write: if signedIn() && uid() == userId;
+      }
+      // Per-conversation read state.
+      match /reads/{convId} {
+        allow read, write: if signedIn() && uid() == userId;
+      }
+      // In-app notifications: readable by owner; writes via Admin SDK only.
+      match /notifications/{notifId} {
+        allow read: if signedIn() && uid() == userId;
+        allow update: if signedIn() && uid() == userId
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt']);
+        allow create, delete: if false;
+      }
+    }
+
+    // Username reservations: readable to check availability; only Admin SDK writes.
+    match /usernames/{name} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
+    // ---------- DM conversations (id: dm_<a>_<b>, a < b, Admin-created) ----------
+    match /conversations/{convId} {
+      function isParticipant() {
+        return signedIn() && uid() in resource.data.participants;
+      }
+      allow read: if isParticipant();
+      // No client-direct creation or metadata writes: POST /api/dm/open,
+      // POST /api/dm/send, and POST /api/dm/backfill (Admin SDK:
+      // session-verified, block-checked, deterministic sorted id) own all
+      // conversation writes atomically. Client-direct creation is denied so
+      // a blocked user cannot forge a DM around the block; client-direct
+      // metadata updates are denied so no client can publish a DM without
+      // the message (or flip hasMessages/lastMessageAt) and break
+      // recipient discovery. Admin SDK bypasses rules.
+      allow create: if false;
+      allow update: if false;
+      allow delete: if false;
+
+      match /messages/{messageId} {
+        function convoParts() {
+          return get(/databases/$(database)/documents/conversations/$(convId)).data.participants;
+        }
+        function inConversation() {
+          return signedIn() && uid() in convoParts();
+        }
+        // Block enforcement: no message writes across a block in either direction.
+        function dmOther() {
+          return convoParts()[0] == uid() ? convoParts()[1] : convoParts()[0];
+        }
+        function notBlocked() {
+          return !exists(/databases/$(database)/documents/blocks/$(uid() + '_' + dmOther()))
+            && !exists(/databases/$(database)/documents/blocks/$(dmOther() + '_' + uid()));
+        }
+        allow read: if inConversation();
+        allow create: if inConversation() && notBlocked() && validNewMessage();
+        allow update: if inConversation() && validMessageUpdate();
+        allow delete: if false;
+      }
+    }
+
+    // ---------- Groups ----------
+    match /groups/{groupId} {
+      function isMember() {
+        return signedIn() && uid() in resource.data.memberIds;
+      }
+      allow read: if isMember();
+      allow create: if signedIn()
+        && request.resource.data.kind == 'group'
+        && request.resource.data.ownerId == uid()
+        && uid() in request.resource.data.memberIds
+        && request.resource.data.memberIds.size() >= 1;
+      // Owner-only structural changes; owner/memberIds/kind immutable here —
+      // membership changes go through Admin SDK.
+      allow update: if signedIn() && resource.data.ownerId == uid()
+        && request.resource.data.ownerId == resource.data.ownerId
+        && request.resource.data.memberIds == resource.data.memberIds
+        && request.resource.data.kind == resource.data.kind;
+      allow delete: if false;
+
+      match /messages/{messageId} {
+        function inGroup() {
+          return signedIn() && uid() in get(/databases/$(database)/documents/groups/$(groupId)).data.memberIds;
+        }
+        allow read: if inGroup();
+        allow create: if inGroup() && validNewMessage();
+        allow update: if inGroup() && validMessageUpdate();
+        allow delete: if false;
+      }
+    }
+
+    // ---------- Spaces / channels / memberships ----------
+    match /spaces/{spaceId} {
+      function isMember() {
+        return signedIn() && exists(/databases/$(database)/documents/spaces/$(spaceId)/members/$(uid()));
+      }
+      function isManager() {
+        return isMember()
+          && get(/databases/$(database)/documents/spaces/$(spaceId)/members/$(uid())).data.role in ['OWNER', 'ADMIN'];
+      }
+      // Public spaces are world-readable; private spaces need membership or ownership.
+      allow read: if resource.data.visibility == 'PUBLIC'
+        || (signedIn() && (resource.data.ownerId == uid() || isMember()));
+      allow create: if signedIn()
+        && request.resource.data.ownerId == uid()
+        && request.resource.data.visibility in ['PRIVATE', 'PUBLIC'];
+      // Owner bypass (covers owner without a member doc) or ADMIN+ role.
+      allow update: if signedIn()
+        && (resource.data.ownerId == uid() || isManager());
+      allow delete: if false;
+
+      match /members/{memberId} {
+        allow read: if isMember();
+        // Membership writes go through Admin SDK (invite join / role change).
+        allow write: if false;
+      }
+
+      match /channels/{channelId} {
+        allow read: if (resource.data.spaceId == spaceId) && (
+          get(/databases/$(database)/documents/spaces/$(spaceId)).data.visibility == 'PUBLIC'
+          || isMember()
+        );
+        allow write: if false; // channel CRUD via Admin SDK with role checks.
+
+        match /messages/{messageId} {
+          // Read parity with channels: public spaces are publicly readable.
+          allow read: if get(/databases/$(database)/documents/spaces/$(spaceId)).data.visibility == 'PUBLIC'
+            || isMember();
+          allow create: if isMember() && validNewMessage();
+          allow update: if isMember() && validMessageUpdate();
+          allow delete: if false;
+        }
+      }
+
+      match /invites/{code} {
+        // Members only: invite codes are bearer secrets; listing them must
+        // not be possible for outsiders. Non-members redeem via the Admin
+        // API (POST /api/invites/redeem), which never exposes other codes.
+        allow read: if isMember();
+        allow write: if false; // Admin SDK only.
+      }
+    }
+
+    // Blocks: deterministic ids {blockerId}_{blockedId} so message rules can
+    // reference both directions. No self-blocks.
+    match /blocks/{docId} {
+      allow read: if signedIn() && resource.data.blockerId == uid();
+      allow create: if signedIn()
+        && request.resource.data.blockerId == uid()
+        && request.resource.data.blockedId is string
+        && request.resource.data.blockedId != uid()
+        && docId == uid() + '_' + request.resource.data.blockedId;
+      allow delete: if signedIn() && resource.data.blockerId == uid();
+      allow update: if false;
+    }
+
+    match /reports/{reportId} {
+      allow create: if signedIn() && request.resource.data.reporterId == uid();
+      allow read: if false; // moderators read via Admin SDK.
+      allow update, delete: if false;
+    }
+  }
+}

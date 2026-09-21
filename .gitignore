@@ -1,0 +1,28 @@
+# deps
+node_modules/
+
+# next
+.next/
+out/
+
+# env + secrets — NEVER commit these
+.env
+.env.local
+.env*.local
+serviceAccount.json
+*-service-account.json
+firebase-service-account.json
+*.pem
+*.key
+
+# firebase caches
+.firebase/
+.firestore_data/
+
+# misc
+*.log
+.DS_Store
+Thumbs.db
+.opencode/
+.audit-tmp/
+*.tsbuildinfo

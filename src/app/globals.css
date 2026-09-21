@@ -1,0 +1,585 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.chat-shell { height: var(--chat-height, 100dvh); overflow: hidden; }
+.mobile-nav { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); flex-shrink: 0; padding: 4px 8px max(4px,env(safe-area-inset-bottom)); background: var(--surface); border-top: 1px solid var(--border); }
+.mobile-nav-item { display: flex; position: relative; min-height: 56px; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--muted); font-size: 11px; font-weight: 600; border-radius: 12px; transition: color 160ms, background-color 160ms; }
+.mobile-nav-item[aria-current="page"] { color: var(--accent-bright); background: var(--accent-soft); }
+.mobile-nav-item[aria-current="page"] svg { animation: nav-select 160ms ease-out; }
+.mobile-nav-item:active svg { transform: scale(.92); }
+.mobile-nav-item svg { transition: transform 160ms; }
+.nav-badge { position: absolute; top: -5px; left: 14px; }
+.message-status { display: inline-flex; width: 18px; justify-content: center; color: var(--muted); }
+.message-status svg { animation: status-change 150ms ease-out; }
+.status-read { color: var(--status-read, var(--accent-bright)); }
+.status-failed { color: var(--status-failed, var(--foreground)); }
+.message-enter-outgoing { animation: message-out 190ms cubic-bezier(.2,.7,.3,1); transform-origin: bottom right; }
+.message-enter-incoming { animation: message-in 210ms cubic-bezier(.2,.7,.3,1); transform-origin: bottom left; }
+.composer-send { transition: transform 140ms ease-out; }
+.composer-send:active:not(:disabled) { transform: scale(.94); }
+.new-messages { position: sticky; bottom: 8px; display: flex; align-items: center; gap: 6px; margin: 0 auto; padding: 8px 14px; border: 1px solid var(--border); border-radius: 24px; background: var(--surface-raised); color: var(--accent-bright); box-shadow: var(--shadow-card); font-size: 12px; font-weight: 600; }
+.unread-badge { animation: badge-in 160ms ease-out; }
+@keyframes message-out { from { opacity: 0; transform: translateY(6px) scale(.97); } to { opacity: 1; transform: none; } }
+@keyframes message-in { from { opacity: 0; transform: translateY(5px) scale(.985); } to { opacity: 1; transform: none; } }
+@keyframes status-change { from { opacity: .3; transform: scale(.9); } to { opacity: 1; transform: none; } }
+@keyframes nav-select { from { transform: scale(.92); } to { transform: none; } }
+@keyframes badge-in { from { opacity: 0; transform: scale(.85); } to { opacity: 1; transform: none; } }
+@media (max-width:767px) {
+  [data-keyboard] .mobile-nav { display: none; }
+  [data-keyboard] .chat-composer { padding-bottom: 8px; }
+  .chat-composer textarea { font-size: 16px; }
+}
+@media (prefers-reduced-motion:reduce) {
+  .message-enter-outgoing, .message-enter-incoming, .message-status svg, .mobile-nav-item svg, .unread-badge { animation: none !important; }
+  .composer-send, .mobile-nav-item, .mobile-nav-item svg { transition: none; }
+  .composer-send:active:not(:disabled), .mobile-nav-item:active svg { transform: none; }
+}
+
+/* ============================================================
+   RUSH semantic theme tokens — single source of truth.
+   Components consume these via the utility→token mapping below;
+   switching themes primarily changes token VALUES (no component
+   copies per theme).
+   ============================================================ */
+
+:root,
+[data-theme="ember"] {
+  color-scheme: light;
+
+  --background: #faf8f5;
+  --surface: #ffffff;
+  --surface-secondary: #f4f3f7;
+  --surface-raised: #ffffff;
+  --surface-hover: #f1eef6;
+  --border: #e6e4ee;
+  --border-strong: #c9c5db;
+  --foreground: #131022;
+  --muted: #6b5e89;
+  --faint: #8579a3;
+
+  --accent: #d92d20;
+  --accent-hover: #b42318;
+  --accent-soft: #fef2f1;
+  --accent-bright: #d92d20;
+  --accent-contrast: #ffffff;
+  --accent-border: #f7a8a4;
+
+  --focus-ring: #d92d20;
+
+  --message-own: #d92d20;
+  --message-own-fg: #ffffff;
+  --message-own-muted: rgba(255, 255, 255, 0.82);
+  --message-other: #ffffff;
+  --message-other-fg: #131022;
+
+  /* Unread/notification badges: ember red on warm light. */
+  --notification: #d92d20;
+  --notification-foreground: #ffffff;
+
+  --scrim: rgba(19, 16, 34, 0.5);
+  --shadow-card: 0 1px 2px rgba(19, 16, 34, 0.06), 0 4px 16px -4px rgba(19, 16, 34, 0.08);
+  --shadow-pop: 0 8px 30px -12px rgba(224, 46, 43, 0.45);
+
+  /* Ember has no carbon weave — warm flat paper. */
+  --carbon-weave: none;
+}
+
+/* ---------- Carbon Green: graphite + woven carbon + sage accent ---------- */
+[data-theme="carbon-green"] {
+  color-scheme: dark;
+
+  --background: #121516;
+  --surface: #1a1f21;
+  --surface-secondary: #1f2628;
+  --surface-raised: #242d30;
+  --surface-hover: #2c3639;
+  --border: #2a3336;
+  --border-strong: #3a464a;
+  --foreground: #f2f5f3;
+  --muted: #a7b5ae;
+  --faint: #93a39c;
+
+  /* Sophisticated emerald — NOT neon. Buttons use the deeper --accent
+     (white-safe ≥4.5); text/links/dots use the brighter --accent-bright. */
+  --accent: #2b8457;
+  --accent-hover: #246f47;
+  --accent-soft: rgba(59, 167, 118, 0.14);
+  --accent-bright: #6fd3a0;
+  --accent-contrast: #ffffff;
+  --accent-border: rgba(111, 211, 160, 0.38);
+
+  --focus-ring: #6fd3a0;
+
+  --message-own: #2b7e57;
+  --message-own-fg: #ffffff;
+  --message-own-muted: rgba(255, 255, 255, 0.78);
+  --message-other: #242d30;
+  --message-other-fg: #eef3f0;
+
+  /* Unread/notification badges follow the theme accent (white-safe). */
+  --notification: #2b8457;
+  --notification-foreground: #ffffff;
+
+  --scrim: rgba(0, 0, 0, 0.62);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.45), 0 10px 28px -14px rgba(0, 0, 0, 0.6);
+  --shadow-pop: 0 6px 22px -10px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(111, 211, 160, 0.16);
+
+  /* Subtle fine woven carbon fiber (lightweight gradients, no assets).
+     Two diagonal weaves (light thread + dark thread) at low alpha so
+     content always outranks texture. */
+  --carbon-weave:
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.028) 0 2px, transparent 2px 4px),
+    repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.028) 0 2px, transparent 2px 4px),
+    repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.22) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(-45deg, rgba(0, 0, 0, 0.22) 0 1px, transparent 1px 3px);
+}
+
+/* ---------- Carbon Pink: same graphite foundation, vivid pink accent ---------- */
+[data-theme="carbon-pink"] {
+  color-scheme: dark;
+
+  --background: #141315;
+  --surface: #1d1b1e;
+  --surface-secondary: #232126;
+  --surface-raised: #2a272d;
+  --surface-hover: #322e37;
+  --border: #2d2a31;
+  --border-strong: #423c49;
+  --foreground: #f6f1f4;
+  --muted: #b3a9b4;
+  --faint: #9c919e;
+
+  /* Refined vivid pink — bold but premium, never neon/purple-gradient. */
+  --accent: #c13a6b;
+  --accent-hover: #a92f5c;
+  --accent-soft: rgba(225, 78, 134, 0.14);
+  --accent-bright: #f49ac1;
+  --accent-contrast: #ffffff;
+  --accent-border: rgba(244, 154, 193, 0.38);
+
+  --focus-ring: #f49ac1;
+
+  --message-own: #b03363;
+  --message-own-fg: #ffffff;
+  --message-own-muted: rgba(255, 255, 255, 0.78);
+  --message-other: #2a272d;
+  --message-other-fg: #f4eef1;
+
+  /* Unread/notification badges follow the theme accent (white-safe). */
+  --notification: #c13a6b;
+  --notification-foreground: #ffffff;
+
+  --scrim: rgba(0, 0, 0, 0.62);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.45), 0 10px 28px -14px rgba(0, 0, 0, 0.6);
+  --shadow-pop: 0 6px 22px -10px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(244, 154, 193, 0.16);
+
+  --carbon-weave:
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.028) 0 2px, transparent 2px 4px),
+    repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.028) 0 2px, transparent 2px 4px),
+    repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.22) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(-45deg, rgba(0, 0, 0, 0.22) 0 1px, transparent 1px 3px);
+}
+
+/* ---------- Dark Samurai: blackened steel + restrained crimson ---------- */
+[data-theme="dark-samurai"] {
+  color-scheme: dark;
+
+  --background: #100f14;
+  --surface: #1a1821;
+  --surface-secondary: #201d29;
+  --surface-raised: #282433;
+  --surface-hover: #322c40;
+  --border: #2b2736;
+  --border-strong: #453d58;
+  --foreground: #f4f1f7;
+  --muted: #b3a9c2;
+  --faint: #978aae;
+
+  /* Restrained crimson on near-black violet charcoal. Deep --accent is
+     white-safe (≥4.5); luminous --accent-bright for text on dark. */
+  --accent: #b8363f;
+  --accent-hover: #9c2f37;
+  --accent-soft: rgba(184, 54, 63, 0.14);
+  --accent-bright: #f0969c;
+  --accent-contrast: #ffffff;
+  --accent-border: rgba(240, 150, 156, 0.38);
+
+  --focus-ring: #f0969c;
+
+  --message-own: #a8343c;
+  --message-own-fg: #ffffff;
+  --message-own-muted: rgba(255, 255, 255, 0.78);
+  --message-other: #282433;
+  --message-other-fg: #ede8f2;
+
+  /* Unread/notification badges follow the theme accent (white-safe). */
+  --notification: #b8363f;
+  --notification-foreground: #ffffff;
+
+  --scrim: rgba(0, 0, 0, 0.62);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.45), 0 10px 28px -14px rgba(0, 0, 0, 0.6);
+  --shadow-pop: 0 6px 22px -10px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(240, 150, 156, 0.16);
+
+  /* Samurai stays flat blackened steel — depth via layered surfaces,
+     not weave. Shared dark rules reference var(--carbon-weave), which is
+     none here, so they degrade to a clean solid automatically. */
+  --carbon-weave: none;
+}
+
+/* ============================================================
+   Base
+   ============================================================ */
+
+html,
+body {
+  height: 100%;
+}
+
+html[data-theme="carbon-green"],
+html[data-theme="carbon-pink"],
+html[data-theme="dark-samurai"] {
+  background: var(--background);
+}
+
+body {
+  background: #faf8f5;
+  background: var(--background);
+  color: #131022;
+  color: var(--foreground);
+  font-family: Inter, system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Carbon material: weave lives on the app background + large surfaces.
+   Elevated panels/cards stay smooth so text remains extremely readable.
+   (Samurai sets --carbon-weave: none, so these degrade to flat solids.) */
+:is([data-theme="carbon-green"], [data-theme="carbon-pink"], [data-theme="dark-samurai"]) body {
+  background-color: var(--background);
+  background-image: var(--carbon-weave);
+  background-size: 8px 8px, 8px 8px, 6px 6px, 6px 6px;
+}
+
+/* Keep the weave calm on small screens — no visual noise on mobile. */
+@media (max-width: 768px) {
+  :is([data-theme="carbon-green"], [data-theme="carbon-pink"]) {
+    --carbon-weave:
+      repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.016) 0 2px, transparent 2px 4px),
+      repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.016) 0 2px, transparent 2px 4px),
+      repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.16) 0 1px, transparent 1px 3px),
+      repeating-linear-gradient(-45deg, rgba(0, 0, 0, 0.16) 0 1px, transparent 1px 3px);
+  }
+}
+
+.font-display {
+  font-family: "Space Grotesk", Inter, system-ui, sans-serif;
+}
+
+/* Visible focus for keyboard users — accent-aware per theme. */
+:where(a, button, input, textarea, select, [tabindex]):focus-visible {
+  outline: 2px solid #d92d20;
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+::selection {
+  background: var(--accent-soft);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Thin scrollbars for the conversation river */
+.river-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+.river-scroll::-webkit-scrollbar-thumb {
+  background: #c9c5db;
+  background: var(--border-strong);
+  border-radius: 8px;
+}
+.river-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ============================================================
+   Unread / notification badges — one class, all themes.
+   Compact pill (1–9 exact, 10+ as "9+"); hidden at 0 by the
+   caller via formatUnreadCount(). Tabular numerals keep the row
+   from shifting as counts change.
+   ============================================================ */
+
+.unread-badge {
+  display: inline-grid;
+  place-items: center;
+  height: 1.25rem;
+  min-width: 1.25rem;
+  max-width: 3rem;
+  padding-left: 0.375rem;
+  padding-right: 0.375rem;
+  border-radius: 9999px;
+  background: var(--notification);
+  color: var(--notification-foreground);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* Compact dot for very tight slots (mobile "You" tab). */
+.unread-dot {
+  display: inline-block;
+  height: 0.5rem;
+  width: 0.5rem;
+  border-radius: 9999px;
+  background: var(--notification);
+  flex-shrink: 0;
+}
+
+/* ============================================================
+   Utility → token mapping for dark themes.
+   Ember keeps stock Tailwind values (untouched).
+   All dark themes SHARE these rules — only token values differ,
+   so switching themes is a pure token swap.
+   ============================================================ */
+
+/* ---- App backgrounds: graphite + subtle weave (material, not wallpaper) ---- */
+:is([data-theme="carbon-green"], [data-theme="carbon-pink"], [data-theme="dark-samurai"]) .bg-paper {
+  background-color: var(--background);
+  background-image: var(--carbon-weave);
+  background-size: 8px 8px, 8px 8px, 6px 6px, 6px 6px;
+}
+:is([data-theme="carbon-green"], [data-theme="carbon-pink"], [data-theme="dark-samurai"]) :is(.bg-paper\/80, .bg-paper\/90) {
+  background-color: var(--background);
+  background-image: var(--carbon-weave);
+  background-size: 8px 8px, 8px 8px, 6px 6px, 6px 6px;
+}
+
+/* ---- Elevated surfaces: smooth lighter panels, NO weave ---- */
+:is([data-theme="carbon-green"], [data-theme="carbon-pink"], [data-theme="dark-samurai"]) .bg-white {
+  background-color: var(--surface);
+  background-image: none;
+  border-color: var(--border);
+}
+:is([data-theme="carbon-green"], [data-theme="carbon-pink"], [data-theme="dark-samurai"]) :is(.bg-ink-50, .bg-ink-100) {
+  background-color: var(--surface-secondary);
+  background-image: none;
+}
+:is([data-theme="carbon-green"], [data-theme="carbon-pink"], [data-theme="dark-samurai"]) .bg-ink-200 {
+  background-color: var(--surface-raised);
+  background-image: none;
+}
+/* Secondary dark buttons / avatars / selected rows: raised panels. */
+:is([data-theme="carbon-green"], [data-theme="carbon-pink"], [data-theme="dark-samurai"]) :is(.bg-ink-800, .bg-ink-900) {
+  background-color: var(--surface-raised);
+  background-image: none;
+  border-color: var(--border);
+}
+:is([data-theme="carbon-green"], [data-theme="carbon-pink"], [data-theme="dark-samurai"]) .bg-ink-900\/50 {
+  background-color: var(--scrim);
+  background-image: none;
+}
+
+/* Selected conversation: raised panel + thin accent spine (restrained). */
+:is([data-theme="carbon-green"], [data-theme="carbon-pink"], [data-theme="dark-samurai"]) button[aria-selected="true"].bg-ink-900 {
+  background-color: var(--surface-raised);
+  background-image: none;
+  box-shadow: inset 0 0 0 1px var(--border), inset 2px 0 0 0 var(--accent);
+}
+
+/* ---- Accent backgrounds: primary actions, unread spine, active rail ---- */
+:is([data-theme="carbon-green"], [data-theme="carbon-pink"], [data-theme="dark-samurai"]) :is(.bg-rush-400, .bg-rush-500, .bg-rush-600) {
+  background-color: var(--accent);
+  background-image: none;
+  color: var(--accent-contrast);
+}
+:is([data-theme="carbon-green"], [data-theme="carbon-pink"], [data-theme="dark-samurai"]) :is(.hover\:bg-rush-700:hover, .hover\:bg-rush-400:hover) {
+  background-color: var(--accent-hover);
+  background-image: none;
+}
+:is([data-theme="carbon-green"], [data-theme="carbon-pink"], [data-theme="dark-samurai"]) .bg-rush-50 {
+  background-color: var(--accent-soft);
+  background-image: none;
+}
+
+/* ---- Hover surfaces ---- */
+:is([data-theme="carbon-green"], [data-theme="carbon-pink"], [data-theme="dark-samurai"]) :is(.hover\:bg-white:hover, .hover\:bg-paper:hover, .hover\:bg-ink-100:hover, .hover\:bg-ink-800:hover) {
+  background-color: var(--surface-hover);
+  background-image: none;
+}
+
+/* ---- Text ---- */
+:is([data-theme="carbon-green"], [data-theme="carbon-pink"], [data-theme="dark-samurai"]) :is(.text-ink-900, .text-ink-700) {
+  color: var(--foreground);
+}
+:is([data-theme="carbon-green"], [data-theme="carbon-pink"], [data-theme="dark-samurai"]) :is(.text-ink-600, .text-ink-500) {
+  color: var(--muted);
+}
+:is([data-theme="carbon-green"], [data-theme="carbon-pink"], [data-theme="dark-samurai"]) :is(.text-ink-400, .text-ink-300) {
+  color: var(--faint);
+}
+:is([data-theme="carbon-green"], [data-theme="carbon-pink"], [data-theme="dark-samurai"]) :is(.text-ink-200, .text-ink-100) {
+  color: var(--muted);
+}
+:is([data-theme="carbon-green"], [data-theme="carbon-pink"], [data-theme="dark-samurai"]) .placeholder\:text-ink-400::placeholder {
+  color: var(--faint);
+  opacity: 1;
+}
+:is([data-theme="carbon-green"], [data-theme="carbon-pink"], [data-theme="dark-samurai"]) .hover\:text-ink-900:hover {
+  color: var(--foreground);
+}
+
+/* Accent text (links, active tabs, "Add") uses the bright variant so it
+   stays legible on dark surfaces. */
+:is([data-theme="carbon-green"], [data-theme="carbon-pink"], [data-theme="dark-samurai"]) :is(.text-rush-700, .text-rush-600, .text-rush-400) {
+  color: var(--accent-bright);
+}
+/* Own-bubble meta (timestamps, "(edited)") sits on the accent bubble. */
+:is([data-theme="carbon-green"], [data-theme="carbon-pink"], [data-theme="dark-samurai"]) :is(.text-rush-200, .text-rush-100) {
+  color: var(--message-own-muted);
+}
+:is([data-theme="carbon-green"], [data-theme="carbon-pink"], [data-theme="dark-samurai"]) .text-green-700 {
+  color: var(--accent-bright);
+}
+:is([data-theme="carbon-green"], [data-theme="carbon-pink"], [data-theme="dark-samurai"]) .text-amber-800 {
+  color: #f0c886;
+}
+:is([data-theme="carbon-green"], [data-theme="carbon-pink"], [data-theme="dark-samurai"]) .bg-amber-50 {
+  background-color: rgba(245, 201, 122, 0.1);
+  background-image: none;
+}
+
+/* ---- Borders ---- */
+:is([data-theme="carbon-green"], [data-theme="carbon-pink"], [data-theme="dark-samurai"]) :is(.border-ink-100, .border-ink-200) {
+  border-color: var(--border);
+}
+:is([data-theme="carbon-green"], [data-theme="carbon-pink"], [data-theme="dark-samurai"]) :is(.border-ink-300, .hover\:border-ink-300:hover) {
+  border-color: var(--border-strong);
+}
+:is([data-theme="carbon-green"], [data-theme="carbon-pink"], [data-theme="dark-samurai"]) :is(.border-rush-200, .border-rush-300, .border-rush-400, .border-rush-600) {
+  border-color: var(--accent-border);
+}
+:is([data-theme="carbon-green"], [data-theme="carbon-pink"], [data-theme="dark-samurai"]) .focus-within\:border-rush-400:focus-within {
+  border-color: var(--accent);
+}
+:is([data-theme="carbon-green"], [data-theme="carbon-pink"], [data-theme="dark-samurai"]) .ring-white {
+  --tw-ring-color: var(--surface);
+}
+:is([data-theme="carbon-green"], [data-theme="carbon-pink"], [data-theme="dark-samurai"]) .divide-ink-100 > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--border);
+}
+
+/* ---- Shadows: restrained depth, no neon glow ---- */
+:is([data-theme="carbon-green"], [data-theme="carbon-pink"], [data-theme="dark-samurai"]) .shadow-card {
+  box-shadow: var(--shadow-card);
+}
+:is([data-theme="carbon-green"], [data-theme="carbon-pink"], [data-theme="dark-samurai"]) .shadow-rush-pop {
+  box-shadow: var(--shadow-pop);
+}
+
+/* ---- Message bubbles: own = accent, other = elevated surface.
+        NEVER a carbon texture inside individual bubbles. ---- */
+:is([data-theme="carbon-green"], [data-theme="carbon-pink"], [data-theme="dark-samurai"]) [role="log"] .bg-white {
+  background-color: var(--message-other);
+  background-image: none;
+  border-color: var(--border);
+  color: var(--message-other-fg);
+}
+:is([data-theme="carbon-green"], [data-theme="carbon-pink"], [data-theme="dark-samurai"]) [role="log"] .bg-rush-600 {
+  background-color: var(--message-own);
+  background-image: none;
+  color: var(--message-own-fg);
+}
+:is([data-theme="carbon-green"], [data-theme="carbon-pink"], [data-theme="dark-samurai"]) [role="log"] .bg-rush-50 {
+  background-color: var(--accent-soft);
+  background-image: none;
+  color: var(--foreground);
+  border-color: var(--accent-border);
+}
+/* Own-bubble attachment links stay readable on accent. */
+:is([data-theme="carbon-green"], [data-theme="carbon-pink"], [data-theme="dark-samurai"]) [role="log"] .bg-rush-600 a {
+  color: var(--message-own-fg);
+}
+/* Other-bubble attachment links use the bright accent. */
+:is([data-theme="carbon-green"], [data-theme="carbon-pink"], [data-theme="dark-samurai"]) [role="log"] .bg-white a {
+  color: var(--accent-bright);
+}
+/* Reply-quote bar inside threads keeps the accent spine on dark surfaces. */
+:is([data-theme="carbon-green"], [data-theme="carbon-pink"], [data-theme="dark-samurai"]) [role="log"] .bg-ink-50 {
+  background-color: var(--surface-secondary);
+  background-image: none;
+  color: var(--muted);
+  border-left-color: var(--accent);
+}
+
+/* ---- Form fields: dark wells, legible placeholders ---- */
+:is([data-theme="carbon-green"], [data-theme="carbon-pink"], [data-theme="dark-samurai"]) :is(input, textarea, select) {
+  color: var(--foreground);
+}
+:is([data-theme="carbon-green"], [data-theme="carbon-pink"], [data-theme="dark-samurai"]) :is(input::placeholder, textarea::placeholder) {
+  color: var(--faint);
+  opacity: 1;
+}
+
+/* ---- Presence: keep semantic meaning; retune offline for dark themes ---- */
+:is([data-theme="carbon-green"], [data-theme="carbon-pink"], [data-theme="dark-samurai"]) .bg-ink-300 {
+  background-color: var(--faint);
+}
+
+/* ---- Skeleton shimmer on dark surfaces ---- */
+:is([data-theme="carbon-green"], [data-theme="carbon-pink"], [data-theme="dark-samurai"]) :is(.animate-pulse.bg-ink-100, div.animate-pulse) {
+  --tw-bg-opacity: 1;
+}
+
+/* ============================================================
+   Theme preview cards (Settings → Appearance) — consume the same
+   semantic tokens directly, so previews always match the real theme.
+   ============================================================ */
+
+.theme-preview {
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  overflow: hidden;
+  text-align: left;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+.theme-preview[data-active="true"] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), var(--shadow-card);
+}
+.theme-preview-ember {
+  background: #faf8f5;
+}
+.theme-preview-carbon-green {
+  background-color: #121516;
+  background-image:
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.05) 0 2px, transparent 2px 4px),
+    repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.05) 0 2px, transparent 2px 4px),
+    repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.3) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(-45deg, rgba(0, 0, 0, 0.3) 0 1px, transparent 1px 3px);
+  background-size: 8px 8px, 8px 8px, 6px 6px, 6px 6px;
+}
+.theme-preview-carbon-pink {
+  background-color: #141315;
+  background-image:
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.05) 0 2px, transparent 2px 4px),
+    repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.05) 0 2px, transparent 2px 4px),
+    repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.3) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(-45deg, rgba(0, 0, 0, 0.3) 0 1px, transparent 1px 3px);
+  background-size: 8px 8px, 8px 8px, 6px 6px, 6px 6px;
+}
+.theme-preview-dark-samurai {
+  background-color: #100f14;
+}

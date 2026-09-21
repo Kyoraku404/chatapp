@@ -1,0 +1,76 @@
+rules_version = '2';
+// RUSH Storage rules.
+//
+// Private attachments are NEVER readable merely for being signed in.
+// Every attachment read/write verifies membership against Firestore
+// (cross-service rules via firestore.get()/exists()):
+//   attachments/dm/{convId}/...    -> requester in conversations/{convId}.participants
+//   attachments/group/{groupId}/... -> requester in groups/{groupId}.memberIds
+//   attachments/space/{spaceId}/... -> requester is a member, or the space is PUBLIC
+// Paths stay unguessable (random suffix, see src/lib/validation.ts) as
+// defense-in-depth. Tradeoff: each authorized download costs Firestore reads
+// for the lookup. If that cost ever dominates, the documented alternative is
+// a server-mediated download (Admin SDK signed URL after a membership check
+// in an API route) — not implemented because rule lookups are correct and
+// cheaper to operate at RUSH's scale.
+// Uploads validated: size + content-type. Never trust extensions.
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function signedIn() { return request.auth != null; }
+    function caller() { return request.auth.uid; }
+
+    function dmParticipants(convId) {
+      return firestore.get(/databases/(default)/documents/conversations/$(convId)).data.participants;
+    }
+    function groupMembers(groupId) {
+      return firestore.get(/databases/(default)/documents/groups/$(groupId)).data.memberIds;
+    }
+    function spaceVisibility(spaceId) {
+      return firestore.get(/databases/(default)/documents/spaces/$(spaceId)).data.visibility;
+    }
+    function isSpaceMember(spaceId) {
+      return signedIn()
+        && firestore.exists(/databases/(default)/documents/spaces/$(spaceId)/members/$(caller()));
+    }
+
+    function validUpload(maxBytes) {
+      return request.resource.size > 0
+        && request.resource.size <= maxBytes
+        && request.resource.contentType.matches('(image/(jpeg|png|webp|gif)|application/pdf)');
+    }
+
+    // Public profile media: owner writes, any signed-in user reads.
+    match /avatars/{userId}/{fileName} {
+      allow read: if signedIn();
+      allow write: if signedIn()
+        && caller() == userId
+        && request.resource.size > 0
+        && request.resource.size <= 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp|gif)');
+      allow delete: if signedIn() && caller() == userId;
+    }
+
+    // Private DM attachments: participants only.
+    match /attachments/dm/{convId}/{fileName} {
+      allow read: if signedIn() && caller() in dmParticipants(convId);
+      allow write: if signedIn() && caller() in dmParticipants(convId) && validUpload(15 * 1024 * 1024);
+      allow delete: if false;
+    }
+
+    // Private group attachments: members only.
+    match /attachments/group/{groupId}/{fileName} {
+      allow read: if signedIn() && caller() in groupMembers(groupId);
+      allow write: if signedIn() && caller() in groupMembers(groupId) && validUpload(15 * 1024 * 1024);
+      allow delete: if false;
+    }
+
+    // Space attachments: members, or anyone for PUBLIC spaces (mirrors channel read).
+    match /attachments/space/{spaceId}/{fileName} {
+      allow read: if spaceVisibility(spaceId) == 'PUBLIC' || isSpaceMember(spaceId);
+      allow write: if isSpaceMember(spaceId) && validUpload(15 * 1024 * 1024);
+      allow delete: if false;
+    }
+  }
+}
