@@ -87,7 +87,7 @@ export default function SettingsPage() {
 
   return (
     <div className="min-h-screen bg-paper">
-      <header className="mx-auto flex max-w-3xl items-center justify-between px-6 py-5">
+      <header className="standalone-safe-top mx-auto flex max-w-3xl items-center justify-between px-6 pb-5">
         <Link href="/app" aria-label="Back to RUSH"><BrandMark /></Link>
       </header>
       <main className="mx-auto max-w-3xl px-6 pb-16">

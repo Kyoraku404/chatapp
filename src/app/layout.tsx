@@ -1,13 +1,20 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { PwaExperience } from "@/components/PwaExperience";
 
-export const viewport: Viewport = { width: 'device-width', initialScale: 1, viewportFit: 'cover', interactiveWidget: 'resizes-content' };
+export const viewport: Viewport = { width: 'device-width', initialScale: 1, viewportFit: 'cover', interactiveWidget: 'resizes-content', themeColor: '#D92D20' };
 
 export const metadata: Metadata = {
   title: "RUSH by OCN — Your people. Your conversations. One place.",
   description:
     "RUSH is a fast, alive, social communication app: direct chats, groups, and spaces with channels. By OCN.",
+  applicationName: 'RUSH',
+  appleWebApp: { capable: true, title: 'RUSH', statusBarStyle: 'black-translucent' },
+  icons: {
+    icon: '/icons/rush-192.png',
+    apple: '/apple-touch-icon.png',
+  },
 };
 
 // Pre-paint theme bootstrap: reads localStorage `rush-theme` and sets
@@ -23,7 +30,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP }} />
       </head>
       <body className="font-sans">
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider>{children}<PwaExperience /></ThemeProvider>
       </body>
     </html>
   );

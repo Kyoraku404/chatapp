@@ -28,13 +28,13 @@ export function Modal({
   }, [onClose]);
 
   useEffect(() => {
-    const el = firstRef.current?.querySelector<HTMLElement>("input, textarea, button");
+    const el = firstRef.current?.querySelector<HTMLElement>("input:not([type='hidden']), textarea, select") ?? firstRef.current?.querySelector<HTMLElement>("button");
     el?.focus();
   }, []);
 
   return (
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-ink-900/50 p-4"
+      className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-ink-900/50 p-4"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -45,7 +45,7 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="w-full max-w-md rounded-3xl border border-ink-200 bg-white p-6 shadow-card"
+        className="mobile-modal-card w-full max-w-md overflow-y-auto rounded-3xl border border-ink-200 bg-white p-6 shadow-card"
       >
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -55,7 +55,7 @@ export function Modal({
           <button
             onClick={onClose}
             aria-label="Close dialog"
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-ink-500 hover:bg-ink-100"
+            className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-ink-500 hover:bg-ink-100"
           >
             ✕
           </button>

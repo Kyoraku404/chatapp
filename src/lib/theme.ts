@@ -60,6 +60,8 @@ export function applyThemeAttribute(theme: ThemeId): void {
     root.dataset.theme = theme;
     // Informs native controls/scrollbars; all non-Ember themes are dark.
     root.style.colorScheme = isDarkTheme(theme) ? "dark" : "light";
+    const themeColor = document.querySelector('meta[name="theme-color"]');
+    if (themeColor) themeColor.setAttribute('content', theme === 'ember' ? '#D92D20' : theme === 'dark-samurai' ? '#100F14' : '#121516');
   } catch {
     // DOM unavailable (SSR) — no-op.
   }

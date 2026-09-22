@@ -3,6 +3,37 @@ import { cookies } from "next/headers";
 import { FieldValue } from "firebase-admin/firestore";
 import { adminDb, verifySession, SESSION_COOKIE_NAME } from "@/lib/firebaseAdmin";
 
+// Read memberships through the authenticated server when a collection-group
+// listener is denied by the deployed Firestore rules.
+export async function GET() {
+  const db = adminDb();
+  if (!db) return NextResponse.json({ error: "Server is not configured." }, { status: 503 });
+  const uid = await verifySession(cookies().get(SESSION_COOKIE_NAME)?.value);
+  if (!uid) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  try {
+    const memberships = await db.collectionGroup("members").where("userId", "==", uid).orderBy("joinedAt", "desc").get();
+    const spaces = await Promise.all(memberships.docs.map(async (member) => {
+      if (member.ref.parent.parent?.parent.id !== "spaces") return null;
+      const spaceId = String(member.get("spaceId") ?? member.ref.parent.parent?.id ?? "");
+      if (!spaceId) return null;
+      const space = await db.collection("spaces").doc(spaceId).get();
+      if (!space.exists) return null;
+      const data = space.data()!;
+      return {
+        id: space.id,
+        name: String(data.name ?? "Space"),
+        description: String(data.description ?? ""),
+        visibility: data.visibility === "PUBLIC" ? "PUBLIC" : "PRIVATE",
+        role: member.get("role") ?? "MEMBER",
+      };
+    }));
+    return NextResponse.json({ spaces: spaces.filter(Boolean) });
+  } catch (error) {
+    console.error("Could not list spaces", error);
+    return NextResponse.json({ error: "Could not load spaces." }, { status: 500 });
+  }
+}
+
 // POST /api/spaces { name, description?, visibility? }
 // Creates the space AND the owner's OWNER membership atomically (Admin SDK).
 // Membership docs are Admin-only per firestore.rules, so creation must live here.

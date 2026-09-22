@@ -134,7 +134,7 @@ export default function ProfilePage() {
 
   return (
     <div className="min-h-screen bg-paper">
-      <header className="mx-auto flex max-w-3xl items-center justify-between px-6 py-5">
+      <header className="standalone-safe-top mx-auto flex max-w-3xl items-center justify-between px-6 pb-5">
         <Link href="/app" aria-label="Back to RUSH"><BrandMark /></Link>
         <Link href="/settings" className="rounded-xl border border-ink-200 bg-white px-4 py-2 text-sm font-semibold hover:border-ink-300">
           Settings

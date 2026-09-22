@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import { Avatar } from "@/components/Presence";
 import type { DemoConversation } from "@/lib/demo";
 import { normalizeFilterText, resolveRiverEmptyState } from "@/lib/sidebar";
@@ -52,6 +53,7 @@ export function ConversationRiver({
   /** Firestore/index/permission failure — never rendered as "no matches". */
   loadError?: string | null;
 }) {
+  const searchId = useId();
   const dbg = riverDebugEnabled();
   if (dbg) {
     console.debug("[rush:river]", {
@@ -74,9 +76,9 @@ export function ConversationRiver({
   return (
     <div className="flex h-full flex-col">
       <div className="p-3">
-        <label htmlFor="river-search" className="sr-only">Search conversations</label>
+        <label htmlFor={searchId} className="sr-only">Search conversations</label>
         <input
-          id="river-search"
+          id={searchId}
           value={filter}
           onChange={(e) => onFilter(e.target.value)}
           placeholder="Search chats, groups, spaces"

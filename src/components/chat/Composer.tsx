@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useId, useLayoutEffect, useRef, useState } from "react";
 import type { DemoMessage } from "@/lib/demo";
 import { InlineError } from "@/components/chat/States";
 
@@ -35,6 +35,14 @@ export function Composer({
   const [uploading, setUploading] = useState(false);
   const boxRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const composerId = useId();
+
+  useLayoutEffect(() => {
+    const box = boxRef.current;
+    if (!box) return;
+    box.style.height = 'auto';
+    box.style.height = `${Math.min(box.scrollHeight, 128)}px`;
+  }, [text]);
 
   async function submit() {
     const v = text.trim();
@@ -113,8 +121,8 @@ export function Composer({
             type="file"
             accept="image/jpeg,image/png,image/webp,image/gif,application/pdf"
             className="sr-only"
-            aria-hidden={!canAttach}
-            tabIndex={canAttach ? 0 : -1}
+            aria-hidden="true"
+            tabIndex={-1}
             onChange={(e) => void pick(e.target.files?.[0])}
           />
           <button
@@ -123,17 +131,18 @@ export function Composer({
             disabled={!canAttach || uploading}
             aria-label={canAttach ? "Attach an image or PDF" : (attachDisabledReason ?? "Attachments unavailable")}
             title={canAttach ? "Attach an image or PDF" : (attachDisabledReason ?? "Attachments unavailable")}
-            className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-ink-500 hover:bg-ink-100 disabled:cursor-not-allowed disabled:opacity-40"
+            className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-ink-500 hover:bg-ink-100 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
               <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
             </svg>
           </button>
-          <label htmlFor="composer" className="sr-only">Write a message</label>
+          <label htmlFor={composerId} className="sr-only">Write a message</label>
           <textarea
-            id="composer"
+            id={composerId}
             ref={boxRef}
             rows={1}
+            enterKeyHint="send"
             value={text}
             onChange={(e) => {
               setText(e.target.value);
@@ -145,13 +154,13 @@ export function Composer({
               }
             }}
             placeholder={uploading ? "Uploading…" : "Message…"}
-            className="max-h-40 min-h-[40px] flex-1 resize-none bg-transparent text-[14.5px] leading-relaxed outline-none placeholder:text-ink-400 disabled:opacity-60"
+            className="max-h-32 min-h-[44px] flex-1 resize-none overflow-y-auto bg-transparent text-[14.5px] leading-relaxed outline-none placeholder:text-ink-400 disabled:opacity-60"
           />
           <button
             type="submit"
             disabled={(!text.trim() && !attachment) || uploading}
             aria-label="Send message"
-            className="composer-send grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-rush-600 text-white shadow-rush-pop hover:bg-rush-700 disabled:opacity-40"
+            className="composer-send grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-rush-600 text-white shadow-rush-pop hover:bg-rush-700 disabled:opacity-40"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
               <path d="m22 2-7 20-4-9-9-4Z" /><path d="M22 2 11 13" />

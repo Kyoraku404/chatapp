@@ -1,4 +1,4 @@
-import { memo, useState } from 'react';
+import { memo, useId, useState } from 'react';
 import { Avatar } from '@/components/Presence';
 import { MessageStatus } from './MessageStatus';
 import type { DemoMessage } from '@/lib/demo';
@@ -11,6 +11,7 @@ export const MessageRow = memo(function MessageRow({ m, startRun, endRun, action
   const [editBusy, setEditBusy] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const editId = useId();
 
   async function saveEdit(m: DemoMessage) {
     if (!onEdit || !draft.trim()) return;
@@ -42,9 +43,9 @@ export const MessageRow = memo(function MessageRow({ m, startRun, endRun, action
                       </div>
                     ) : editingId === m.id ? (
                       <div className="rounded-2xl border border-rush-300 bg-white p-2">
-                        <label htmlFor={`edit-${m.id}`} className="sr-only">Edit message</label>
+                        <label htmlFor={editId} className="sr-only">Edit message</label>
                         <textarea
-                          id={`edit-${m.id}`}
+                          id={editId}
                           value={draft}
                           onChange={(e) => setDraft(e.target.value)}
                           rows={2}
@@ -70,7 +71,7 @@ export const MessageRow = memo(function MessageRow({ m, startRun, endRun, action
                       </div>
                     ) : (
                       <div
-                        className={`rounded-2xl px-3.5 py-2 text-[14.5px] leading-[1.55] ${
+                        className={`break-words rounded-2xl px-3.5 py-2 text-[14.5px] leading-[1.55] [overflow-wrap:anywhere] ${
                           own
                             ? "rounded-tr-md bg-rush-600 text-white shadow-rush-pop"
                             : "rounded-tl-md border border-ink-100 bg-white text-ink-900 shadow-card"
@@ -99,7 +100,7 @@ export const MessageRow = memo(function MessageRow({ m, startRun, endRun, action
                         {m.edited && <span className={`text-[11px] ${own ? "text-rush-100" : "text-ink-400"}`}>(edited)</span>}
                       </div>
                     )}
-                    <div className={`mt-0.5 flex items-center gap-2 px-1 text-[11px] text-ink-500 ${own ? "justify-end" : ""}`}>
+                    <div className={`mt-0.5 flex flex-wrap items-center gap-x-2 px-1 text-[11px] text-ink-500 ${own ? "justify-end" : ""}`}>
                       {endRun && <span>{m.at}</span>}
                       {m.own && !m.deleted && m.status && <MessageStatus status={m.status} />}
                       {m.failed && (
@@ -111,7 +112,7 @@ export const MessageRow = memo(function MessageRow({ m, startRun, endRun, action
                         <>
                           <button
                             onClick={() => onReply?.(m)}
-                            className="opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
+                            className="message-action opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
                           >
                             Reply
                           </button>
@@ -122,7 +123,7 @@ export const MessageRow = memo(function MessageRow({ m, startRun, endRun, action
                                 setDraft(m.content);
                                 setEditError(null);
                               }}
-                              className="opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
+                              className="message-action opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
                             >
                               Edit
                             </button>
@@ -144,7 +145,7 @@ export const MessageRow = memo(function MessageRow({ m, startRun, endRun, action
                             ) : (
                               <button
                                 onClick={() => setConfirmDelete(m.id)}
-                                className="opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
+                              className="message-action opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
                               >
                                 Delete
                               </button>

@@ -61,8 +61,33 @@ export function useSpaces(uid: string | null) {
     setLoading(true);
     setError(null);
     let cancelled = false;
+    let fallbackTimer: ReturnType<typeof setInterval> | null = null;
+    async function loadFromServer() {
+      try {
+        const response = await fetch("/api/spaces", { cache: "no-store" });
+        const body = (await response.json()) as { spaces?: LiveSpace[]; error?: string };
+        if (!response.ok || !body.spaces) throw new Error(body.error || "Could not load spaces.");
+        if (cancelled) return;
+        setSpaces(body.spaces);
+        setError(null);
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Could not load spaces.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    function refreshIfVisible() {
+      if (document.visibilityState === "visible") void loadFromServer();
+    }
+    function startServerFallback() {
+      if (fallbackTimer) return;
+      void loadFromServer();
+      fallbackTimer = setInterval(refreshIfVisible, 10000);
+      window.addEventListener("focus", refreshIfVisible);
+      window.addEventListener("rush:spaces-changed", loadFromServer);
+    }
     const unsub = onSnapshot(
-      query(collectionGroup(db, "members"), where("userId", "==", uid)),
+      query(collectionGroup(db, "members"), where("userId", "==", uid), orderBy("joinedAt", "desc")),
       (snap) => {
         if (cancelled) return;
         void (async () => {
@@ -99,14 +124,20 @@ export function useSpaces(uid: string | null) {
       },
       (e) => {
         if (!cancelled) {
-          setError(e.message);
-          setLoading(false);
+          if (e.code === "permission-denied") startServerFallback();
+          else {
+            setError(e.message);
+            setLoading(false);
+          }
         }
       },
     );
     return () => {
       cancelled = true;
       unsub();
+      if (fallbackTimer) clearInterval(fallbackTimer);
+      window.removeEventListener("focus", refreshIfVisible);
+      window.removeEventListener("rush:spaces-changed", loadFromServer);
     };
   }, [uid]);
 

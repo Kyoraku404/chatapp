@@ -9,11 +9,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MobileNav } from '@/components/chat/MobileNav';
 import { useMobileViewport } from '@/hooks/useMobileViewport';
 import Link from "next/link";
+import { Phone } from 'lucide-react';
 import { doc, onSnapshot } from "firebase/firestore";
 import { BrandMark } from "@/components/BrandMark";
 import { Avatar } from "@/components/Presence";
 import { ConversationRiver } from "@/components/chat/ConversationRiver";
 import { MessageList } from "@/components/chat/MessageList";
+import { VoiceCallPanel } from '@/components/chat/VoiceCallPanel';
 import { Composer, type ComposerAttachment } from "@/components/chat/Composer";
 import { EmptyConversation, InlineError, RiverSkeleton } from "@/components/chat/States";
 import { Modal } from "@/components/Modal";
@@ -25,6 +27,7 @@ import { BlockButton } from "@/components/BlockButton";
 import { useAuthUser } from "@/hooks/useAuthUser";
 import { useLiveConversations } from "@/hooks/useLiveConversations";
 import { useLiveMessages } from "@/hooks/useLiveMessages";
+import { useVoiceCall } from '@/hooks/useVoiceCall';
 import { useChannels, useSpaceMembers, useSpaces } from "@/hooks/useSpaces";
 import { firebaseDb } from "@/lib/firebaseClient";
 import { channelMessageCollection, messageCollection } from "@/lib/transport";
@@ -62,6 +65,7 @@ export function LiveApp() {
   useMobileViewport();
   const auth = useAuthUser();
   const uid = auth.user?.uid ?? null;
+  const voice = useVoiceCall(uid);
   const [rail, setRail] = useState<Rail>("chats");
   const [sel, setSel] = useState<Sel | null>(null);
   const [modal, setModal] = useState<ModalKind>(null);
@@ -375,6 +379,7 @@ export function LiveApp() {
           <h2 className="font-display truncate text-base font-semibold">{headerTitle}</h2>
           <p className="truncate text-xs text-ink-500">{headerSub || "Direct message"}</p>
         </div>
+        {sel.kind === 'dm' && dmOther && <button onClick={() => void voice.start(sel.id, dmOther)} disabled={blocked || Boolean(voice.call) || voice.phase !== 'idle'} aria-label={`Voice call ${headerTitle}`} title="Voice call" className="grid h-9 w-9 place-items-center rounded-xl border border-ink-200 bg-white text-ink-600 hover:border-ink-300 disabled:opacity-40"><Phone size={17} strokeWidth={1.8} /></button>}
         <button
           onClick={() => setShowContext((s) => !s)}
           aria-expanded={showContext}
@@ -555,11 +560,11 @@ export function LiveApp() {
                 <button
                   onClick={openNew}
                   aria-label={`New ${rail === "chats" ? "conversation" : rail === "groups" ? "group" : "space"}`}
-                  className="rounded-xl bg-ink-900 px-3 py-1.5 text-xs font-semibold text-white"
+                  className="min-h-11 rounded-xl bg-ink-900 px-4 py-2 text-xs font-semibold text-white"
                 >
                   + New
                 </button>
-                <Link href="/profile" aria-label={`Your profile${totalBadge != null ? `, ${convos.totalUnread} unread messages` : ""}`} className="relative inline-flex">
+                <Link href="/profile" aria-label={`Your profile${totalBadge != null ? `, ${convos.totalUnread} unread messages` : ""}`} className="relative grid h-11 w-11 place-items-center">
                   <Avatar name={auth.user?.email ?? "You"} size={36} />
                   {avatarBadge}
                 </Link>
@@ -570,7 +575,7 @@ export function LiveApp() {
         ) : sel ? (
           <div className="flex min-h-0 flex-1 flex-col">
             <header className="flex items-center gap-2 border-b border-ink-100 px-3 py-2.5">
-              <button onClick={() => setMobileView("list")} aria-label="Back to conversations" className="grid h-10 w-10 place-items-center rounded-xl hover:bg-white">
+              <button onClick={() => setMobileView("list")} aria-label="Back to conversations" className="grid h-11 w-11 shrink-0 place-items-center rounded-xl hover:bg-white">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m15 18-6-6 6-6" /></svg>
               </button>
               <Avatar name={headerTitle} size={32} src={headerAvatar} />
@@ -578,6 +583,7 @@ export function LiveApp() {
                 <h2 className="font-display truncate text-base font-semibold">{headerTitle}</h2>
                 <p className="truncate text-xs text-ink-500">{headerSub || "Direct message"}</p>
               </div>
+              {sel.kind === 'dm' && dmOther && <button onClick={() => void voice.start(sel.id, dmOther)} disabled={blocked || Boolean(voice.call) || voice.phase !== 'idle'} aria-label={`Voice call ${headerTitle}`} title="Voice call" className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-ink-600 disabled:opacity-40"><Phone size={19} strokeWidth={1.8} /></button>}
             </header>
             <MessageList
         key={selKey(sel)}
@@ -596,8 +602,10 @@ export function LiveApp() {
             <Composer replyTo={replyTo} onClearReply={() => setReplyTo(null)} onSend={handleSend} onUploadFile={handleUpload} />
           </div>
         ) : null}
-        <MobileNav active={rail} unread={convos.totalUnread} onSelect={id => { setRail(id); setSel(null); setMobileView('list'); }} />
+        {mobileView === 'list' && <MobileNav active={rail} unread={convos.totalUnread} onSelect={id => { setRail(id); setSel(null); setMobileView('list'); }} />}
       </div>
+
+      <VoiceCallPanel voice={voice} uid={uid} />
 
       {/* ── Modals ─────────────────────────────────────────── */}
       {modal === "new-dm" && (
@@ -640,6 +648,7 @@ export function LiveApp() {
             setModal(null);
             setRail("spaces");
             setActiveSpaceId(id);
+            window.dispatchEvent(new Event("rush:spaces-changed"));
           }}
         />
       )}
@@ -650,6 +659,7 @@ export function LiveApp() {
             setModal(null);
             setRail("spaces");
             setActiveSpaceId(id);
+            window.dispatchEvent(new Event("rush:spaces-changed"));
           }}
         />
       )}
