@@ -3,7 +3,7 @@ import { cookies } from 'next/headers';
 import { adminDb, verifySession, SESSION_COOKIE_NAME } from '@/lib/firebaseAdmin';
 import { dmConversationId } from '@/lib/dm';
 import { blockDocId } from '@/lib/blocking';
-import { CALL_ACTIVE_MS, CALL_RING_MS, callIsLive, isIceCandidate, isSdp, type VoiceCallRecord } from '@/lib/voiceCalls';
+import { CALL_ACTIVE_MS, CALL_RING_MS, callIsLive, isIceCandidate, isSdp, type CallMedia, type VoiceCallRecord } from '@/lib/voiceCalls';
 
 type RequestBody = {
   action?: 'start' | 'answer' | 'end' | 'candidate';
@@ -13,13 +13,14 @@ type RequestBody = {
   offer?: unknown;
   answer?: unknown;
   candidate?: unknown;
+  media?: CallMedia;
 };
 
 const result = (error: string, status: number) => NextResponse.json({ error }, { status });
 
 export async function POST(req: Request) {
   const db = adminDb();
-  if (!db) return result('Voice calls are not configured.', 503);
+  if (!db) return result('Calls are not configured.', 503);
   const uid = await verifySession(cookies().get(SESSION_COOKIE_NAME)?.value);
   if (!uid) return result('Unauthorized.', 401);
   const body = await req.json().catch(() => ({})) as RequestBody;
@@ -29,6 +30,7 @@ export async function POST(req: Request) {
     if (dmConversationId(uid, otherUid) !== conversationId) return result('Invalid participants.', 400);
   } catch { return result('Invalid participants.', 400); }
   if (action === 'start' && !isSdp(body.offer, 'offer')) return result('Invalid offer.', 400);
+  if (action === 'start' && body.media !== undefined && body.media !== 'audio' && body.media !== 'video') return result('Invalid call type.', 400);
   if (action === 'answer' && !isSdp(body.answer, 'answer')) return result('Invalid answer.', 400);
   if (action === 'candidate' && !isIceCandidate(body.candidate)) return result('Invalid network candidate.', 400);
   if (action !== 'start' && (!callId || !/^[A-Za-z0-9_-]{8,100}$/.test(callId))) return result('Invalid call ID.', 400);
@@ -57,7 +59,7 @@ export async function POST(req: Request) {
           id: newId, conversationId, callerId: uid, calleeId: otherUid,
           callerName: String(caller.data()?.displayName ?? 'Someone').slice(0, 80),
           calleeName: String(callee.data()?.displayName ?? 'Someone').slice(0, 80),
-          status: 'ringing', offer: body.offer as VoiceCallRecord['offer'], answer: null,
+          status: 'ringing', media: body.media ?? 'audio', offer: body.offer as VoiceCallRecord['offer'], answer: null,
           remoteCandidates: [], createdAt: now, expiresAt: now + CALL_RING_MS,
         };
         tx.set(myRef, call);

@@ -1,6 +1,7 @@
 import { useId } from 'react';
 import { Search } from 'lucide-react';
 import { Avatar } from "@/components/Presence";
+import Link from "next/link";
 import type { DemoConversation } from "@/lib/demo";
 import { normalizeFilterText, resolveRiverEmptyState } from "@/lib/sidebar";
 import { formatUnreadCount } from "@/lib/unread";
@@ -96,7 +97,7 @@ export function ConversationRiver({
           const active = c.id === activeId;
           const badge = formatUnreadCount(c.unread);
           return (
-            <li key={c.id}>
+            <li key={c.id} className="relative">
               <button
                 role="option"
                 aria-selected={active}
@@ -135,6 +136,7 @@ export function ConversationRiver({
                   )}
                 </span>
               </button>
+              {active && c.kind === "dm" && c.username && <Link href={`/u/${c.username}?dm=${encodeURIComponent(c.id)}`} className="absolute bottom-1 right-3 rounded-md px-1.5 py-0.5 text-[10px] font-bold text-rush-400 hover:underline">View profile</Link>}
             </li>
           );
         })}

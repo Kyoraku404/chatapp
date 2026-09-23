@@ -5,6 +5,7 @@
 // memberIds). Membership later changes go through the Admin API.
 
 import { useState } from "react";
+import Link from "next/link";
 import { addDoc, collection, serverTimestamp } from "firebase/firestore";
 import { firebaseDb } from "@/lib/firebaseClient";
 import { Modal } from "@/components/Modal";
@@ -108,10 +109,10 @@ export function CreateGroupModal({
         {hits
           .filter((h) => !members.some((m) => m.uid === h.uid))
           .map((h) => (
-            <li key={h.uid}>
+            <li key={h.uid} className="flex items-center gap-1">
               <button
                 onClick={() => setMembers((prev) => [...prev, h])}
-                className="flex w-full items-center gap-3 rounded-2xl px-3 py-2 text-left hover:bg-paper"
+                className="flex min-w-0 flex-1 items-center gap-3 rounded-2xl px-3 py-2 text-left hover:bg-paper"
               >
                 <Avatar name={h.displayName} size={32} />
                 <span className="min-w-0 flex-1">
@@ -120,6 +121,7 @@ export function CreateGroupModal({
                 </span>
                 <span className="text-xs font-semibold text-rush-700">Add</span>
               </button>
+              <Link href={`/u/${h.username}`} className="shrink-0 rounded-xl px-2 py-2 text-xs font-semibold text-rush-700 hover:bg-paper">Profile</Link>
             </li>
           ))}
       </ul>

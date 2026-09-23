@@ -9,7 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MobileNav } from '@/components/chat/MobileNav';
 import { useMobileViewport } from '@/hooks/useMobileViewport';
 import Link from "next/link";
-import { Phone, Palette } from 'lucide-react';
+import { Phone, Video, Palette } from 'lucide-react';
 import { doc, onSnapshot } from "firebase/firestore";
 import { BrandMark } from "@/components/BrandMark";
 import { Avatar } from "@/components/Presence";
@@ -33,7 +33,7 @@ import { firebaseDb } from "@/lib/firebaseClient";
 import { channelMessageCollection, messageCollection } from "@/lib/transport";
 import { markConversationRead } from "@/lib/readState";
 import { uploadAttachment } from "@/lib/uploads";
-import { getProfiles, profileCacheGet } from "@/lib/profiles";
+import { getProfiles, profileCacheGet, profileCachePrime, type PublicProfile } from "@/lib/profiles";
 import { normalizeFilterText } from "@/lib/sidebar";
 import { blockDocId } from "@/lib/blocking";
 import { canCreateInvite, canManageChannels } from "@/lib/permissions";
@@ -65,6 +65,16 @@ export function LiveApp() {
   useMobileViewport();
   const auth = useAuthUser();
   const uid = auth.user?.uid ?? null;
+  const [ownProfile, setOwnProfile] = useState<PublicProfile | null>(null);
+  useEffect(() => {
+    const db = firebaseDb(); if (!uid || !db) return;
+    return onSnapshot(doc(db, "users", uid), snap => {
+      if (!snap.exists()) return;
+      const data = snap.data();
+      const next = { uid, displayName: String(data.displayName ?? "You"), username: String(data.username ?? ""), avatarUrl: (data.avatarUrl as string | null | undefined) ?? null, status: typeof data.status === "string" ? data.status : null };
+      profileCachePrime(next); setOwnProfile(next);
+    });
+  }, [uid]);
   const voice = useVoiceCall(uid);
   const [rail, setRail] = useState<Rail>("chats");
   const [sel, setSel] = useState<Sel | null>(null);
@@ -175,7 +185,19 @@ export function LiveApp() {
   }, [uid, sel, acknowledge, live.messages, readKey]);
 
   // Group member profiles for header/context.
-  const [groupMembers, setGroupMembers] = useState<{ uid: string; name: string }[]>([]);
+  const [groupMembers, setGroupMembers] = useState<{ uid: string; name: string; username: string }[]>([]);
+  useEffect(() => {
+    if (groupMembers.length === 0) return;
+    const refresh = window.setInterval(() => {
+      void getProfiles(groupMembers.map(m => m.uid)).then(profiles => {
+        setGroupMembers(previous => previous.map(member => {
+          const profile = profiles.get(member.uid);
+          return profile ? { ...member, name: profile.displayName, username: profile.username } : member;
+        }));
+      }).catch(() => undefined);
+    }, 20_000);
+    return () => window.clearInterval(refresh);
+  }, [groupMembers]);
   useEffect(() => {
     if (sel?.kind !== "group") {
       setGroupMembers([]);
@@ -188,7 +210,7 @@ export function LiveApp() {
       (snap) => {
         const ids = ((snap.data()?.memberIds as string[] | undefined) ?? []).slice(0, 50);
         void getProfiles(ids)
-          .then((m) => setGroupMembers(ids.map((id) => ({ uid: id, name: m.get(id)?.displayName ?? "Unknown" }))))
+          .then((m) => setGroupMembers(ids.map((id) => ({ uid: id, name: m.get(id)?.displayName ?? "Unknown", username: m.get(id)?.username ?? "" }))))
           .catch(() => undefined);
       },
       () => undefined,
@@ -374,12 +396,13 @@ export function LiveApp() {
   const conversationPane = sel ? (
     <>
       <header className="flex items-center gap-3 border-b border-ink-100 bg-paper/90 px-4 py-3 backdrop-blur md:px-6">
-        <Avatar name={headerTitle} size={36} src={headerAvatar} />
+        {sel.kind === "dm" && dmUsername ? <Link href={`/u/${dmUsername}?dm=${encodeURIComponent(sel.id)}`} aria-label={`View ${headerTitle}'s profile`}><Avatar name={headerTitle} size={36} src={headerAvatar} /></Link> : <Avatar name={headerTitle} size={36} src={headerAvatar} />}
         <div className="min-w-0 flex-1">
-          <h2 className="font-display truncate text-base font-semibold">{headerTitle}</h2>
+          <h2 className="font-display truncate text-base font-semibold">{sel.kind === "dm" && dmUsername ? <Link href={`/u/${dmUsername}?dm=${encodeURIComponent(sel.id)}`} className="hover:underline">{headerTitle}</Link> : headerTitle}</h2>
           <p className="truncate text-xs text-ink-500">{headerSub || "Direct message"}</p>
         </div>
         {sel.kind === 'dm' && dmOther && <button onClick={() => void voice.start(sel.id, dmOther)} disabled={blocked || Boolean(voice.call) || voice.phase !== 'idle'} aria-label={`Voice call ${headerTitle}`} title="Voice call" className="grid h-9 w-9 place-items-center rounded-xl border border-ink-200 bg-white text-ink-600 hover:border-ink-300 disabled:opacity-40"><Phone size={17} strokeWidth={1.8} /></button>}
+        {sel.kind === 'dm' && dmOther && <button onClick={() => void voice.start(sel.id, dmOther, 'video')} disabled={blocked || Boolean(voice.call) || voice.phase !== 'idle'} aria-label={`Video call ${headerTitle}`} title="Video call" className="grid h-9 w-9 place-items-center rounded-xl border border-ink-200 bg-white text-ink-600 hover:border-ink-300 disabled:opacity-40"><Video size={17} strokeWidth={1.8} /></button>}
         <button
           onClick={() => setShowContext((s) => !s)}
           aria-expanded={showContext}
@@ -507,7 +530,7 @@ export function LiveApp() {
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" /></svg>
             </Link>
             <Link href="/profile" aria-label={`Your profile${totalBadge != null ? `, ${convos.totalUnread} unread messages` : ""}`} className="relative inline-flex">
-              <Avatar name={auth.user?.email ?? "You"} size={40} />
+              <Avatar name={ownProfile?.displayName ?? "You"} size={40} src={ownProfile?.avatarUrl} />
               {avatarBadge}
             </Link>
           </div>
@@ -565,7 +588,7 @@ export function LiveApp() {
                   + New
                 </button>
                 <Link href="/profile" aria-label={`Your profile${totalBadge != null ? `, ${convos.totalUnread} unread messages` : ""}`} className="relative grid h-11 w-11 place-items-center">
-                  <Avatar name={auth.user?.email ?? "You"} size={36} />
+                  <Avatar name={ownProfile?.displayName ?? "You"} size={36} src={ownProfile?.avatarUrl} />
                   {avatarBadge}
                 </Link>
               </div>
@@ -582,12 +605,13 @@ export function LiveApp() {
               <button onClick={() => setMobileView("list")} aria-label="Back to conversations" className="grid h-11 w-11 shrink-0 place-items-center rounded-xl hover:bg-white">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m15 18-6-6 6-6" /></svg>
               </button>
-              <Avatar name={headerTitle} size={32} src={headerAvatar} />
+              {sel.kind === "dm" && dmUsername ? <Link href={`/u/${dmUsername}?dm=${encodeURIComponent(sel.id)}`} aria-label={`View ${headerTitle}'s profile`}><Avatar name={headerTitle} size={32} src={headerAvatar} /></Link> : <Avatar name={headerTitle} size={32} src={headerAvatar} />}
               <div className="min-w-0 flex-1">
-                <h2 className="font-display truncate text-base font-semibold">{headerTitle}</h2>
+                <h2 className="font-display truncate text-base font-semibold">{sel.kind === "dm" && dmUsername ? <Link href={`/u/${dmUsername}?dm=${encodeURIComponent(sel.id)}`} className="hover:underline">{headerTitle}</Link> : headerTitle}</h2>
                 <p className="truncate text-xs text-ink-500">{headerSub || "Direct message"}</p>
               </div>
               {sel.kind === 'dm' && dmOther && <button onClick={() => void voice.start(sel.id, dmOther)} disabled={blocked || Boolean(voice.call) || voice.phase !== 'idle'} aria-label={`Voice call ${headerTitle}`} title="Voice call" className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-ink-600 disabled:opacity-40"><Phone size={19} strokeWidth={1.8} /></button>}
+              {sel.kind === 'dm' && dmOther && <button onClick={() => void voice.start(sel.id, dmOther, 'video')} disabled={blocked || Boolean(voice.call) || voice.phase !== 'idle'} aria-label={`Video call ${headerTitle}`} title="Video call" className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-ink-600 disabled:opacity-40"><Video size={19} strokeWidth={1.8} /></button>}
             </header>
             <MessageList
         key={selKey(sel)}
@@ -736,7 +760,7 @@ function ContextPanel({
   dmOther: string | null;
   blocked: boolean;
   onBlocked: (b: boolean) => void;
-  groupMembers: { uid: string; name: string }[];
+  groupMembers: { uid: string; name: string; username: string }[];
   space: { id: string; name: string; description: string } | null;
   members: { uid: string; displayName: string; username: string; role: SpaceRole }[];
   myRole: SpaceRole | null;
@@ -774,7 +798,7 @@ function ContextPanel({
             {groupMembers.map((m) => (
               <li key={m.uid} className="flex items-center gap-2">
                 <Avatar name={m.name} size={28} />
-                <span className="truncate">{m.name}{m.uid === uid ? " (you)" : ""}</span>
+                {m.username ? <Link href={`/u/${m.username}`} className="truncate hover:underline">{m.name}{m.uid === uid ? " (you)" : ""}</Link> : <span className="truncate">{m.name}</span>}
               </li>
             ))}
           </ul>
@@ -790,9 +814,7 @@ function ContextPanel({
             {members.map((m) => (
               <li key={m.uid} className="flex items-center gap-2">
                 <Avatar name={m.displayName} size={28} />
-                <span className="min-w-0 flex-1 truncate">
-                  {m.displayName}{m.uid === uid ? " (you)" : ""}
-                </span>
+                <Link href={`/u/${m.username}`} className="min-w-0 flex-1 truncate hover:underline">{m.displayName}{m.uid === uid ? " (you)" : ""}</Link>
                 <span className="text-[10px] font-semibold uppercase text-ink-400">{m.role}</span>
               </li>
             ))}

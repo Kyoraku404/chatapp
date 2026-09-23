@@ -45,6 +45,7 @@ export interface DemoMessage {
   // Live-only extensions (never set by preview fixtures).
   /** Sender uid. */
   senderId?: string;
+  senderUsername?: string;
   /** Sender avatar URL for message grouping headers (initials fallback). */
   senderAvatarUrl?: string | null;
   /** Resolved attachment download URL (IMAGE/FILE messages). */

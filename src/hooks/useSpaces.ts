@@ -239,5 +239,18 @@ export function useSpaceMembers(spaceId: string | null) {
     };
   }, [spaceId]);
 
+  useEffect(() => {
+    if (!spaceId || members.length === 0) return;
+    const refresh = window.setInterval(() => {
+      void getProfiles(members.map(m => m.uid)).then(profiles => {
+        setMembers(previous => previous.map(member => {
+          const profile = profiles.get(member.uid);
+          return profile ? { ...member, displayName: profile.displayName, username: profile.username, avatarUrl: profile.avatarUrl ?? null } : member;
+        }));
+      }).catch(() => undefined);
+    }, 20_000);
+    return () => window.clearInterval(refresh);
+  }, [spaceId, members]);
+
   return { members, loading };
 }

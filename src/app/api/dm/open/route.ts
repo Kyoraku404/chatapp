@@ -5,6 +5,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { adminDb, verifySession, SESSION_COOKIE_NAME } from "@/lib/firebaseAdmin";
 import { dmConversationId, classifyDmDoc } from "@/lib/dm";
 import { canDirectMessage } from "@/lib/blocking";
+import { canReceiveDm } from "@/lib/profilePrivacy";
 
 // POST /api/dm/open { otherUid }
 // Deterministic + idempotent: same pair always resolves to the same doc.
@@ -56,6 +57,7 @@ export async function POST(req: Request) {
   const ref = db.doc(`conversations/${id}`);
   const snap = await ref.get();
   if (!snap.exists) {
+    if (!await canReceiveDm(db, otherUid)) return NextResponse.json({ error: "This user is not accepting new direct messages." }, { status: 403 });
     const [a, b] = [uid, otherUid].sort();
     await ref.set({
       kind: "dm",

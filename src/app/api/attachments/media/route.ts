@@ -22,7 +22,7 @@ export async function GET(req: Request) {
   const scopeId = data.scopeId as string;
   if (!data.used && data.ownerId !== uid) return new Response(null, { status: 403 });
   if (!await canAccessAttachment(db, uid, scope, scopeId)) return new Response(null, { status: 403 });
-  if (data.used && scope !== "avatar") {
+  if (data.used && scope !== "avatar" && scope !== "banner") {
     if (typeof data.messagePath !== "string") return new Response(null, { status: 404 });
     const message = (await db.doc(data.messagePath).get()).data();
     if (!message || message.deletedAt || message.attachment?.storagePath !== data.storagePath)

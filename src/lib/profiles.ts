@@ -14,6 +14,8 @@ export interface PublicProfile {
 }
 
 const cache = new Map<string, PublicProfile>();
+const fetchedAt = new Map<string, number>();
+const PROFILE_TTL_MS = 20_000;
 
 export function profileCacheGet(uid: string): PublicProfile | undefined {
   return cache.get(uid);
@@ -21,6 +23,7 @@ export function profileCacheGet(uid: string): PublicProfile | undefined {
 
 export function profileCachePrime(p: PublicProfile): void {
   cache.set(p.uid, p);
+  fetchedAt.set(p.uid, Date.now());
 }
 
 function fallback(uid: string): PublicProfile {
@@ -30,7 +33,7 @@ function fallback(uid: string): PublicProfile {
 export async function getProfiles(uids: string[]): Promise<Map<string, PublicProfile>> {
   const out = new Map<string, PublicProfile>();
   const db = firebaseDb();
-  const missing = [...new Set(uids.filter(Boolean))].filter((u) => !cache.has(u));
+  const missing = [...new Set(uids.filter(Boolean))].filter((u) => !cache.has(u) || Date.now() - (fetchedAt.get(u) ?? 0) > PROFILE_TTL_MS);
   if (db && missing.length > 0) {
     // Bounded fan-out: one doc read per distinct unknown uid, then cached.
     const results = await Promise.all(
@@ -51,7 +54,7 @@ export async function getProfiles(uids: string[]): Promise<Map<string, PublicPro
         }
       }),
     );
-    for (const p of results) cache.set(p.uid, p);
+    for (const p of results) { cache.set(p.uid, p); fetchedAt.set(p.uid, Date.now()); }
   }
   for (const u of new Set(uids.filter(Boolean))) out.set(u, cache.get(u) ?? fallback(u));
   return out;

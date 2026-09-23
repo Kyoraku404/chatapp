@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { firebaseDb } from '@/lib/firebaseClient';
-import { callIsLive, type VoiceCallRecord } from '@/lib/voiceCalls';
+import { callIsLive, type CallMedia, type VoiceCallRecord } from '@/lib/voiceCalls';
 import { CallSounds } from '@/lib/callSounds';
 import { microphoneError } from '@/lib/microphone';
 
@@ -22,16 +22,24 @@ async function iceServers(): Promise<RTCIceServer[]> {
   return data.iceServers;
 }
 
-async function captureMicrophone(): Promise<MediaStream> {
+async function captureMedia(media: CallMedia): Promise<MediaStream> {
   if (window.isSecureContext === false) throw new Error(microphoneError(undefined, false, false));
   if (!navigator.mediaDevices?.getUserMedia) throw new Error('This browser cannot request microphone access. Open RUSH directly in a current browser over HTTPS.');
+  let stream: MediaStream;
   try {
-    return await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true }, video: false });
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true }, video: false });
   } catch (e) {
     let embedded = false;
     try { embedded = window.self !== window.top; } catch { embedded = true; }
     throw new Error(microphoneError(e, true, embedded));
   }
+  if (media === 'video') {
+    try {
+      const camera = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } } });
+      camera.getVideoTracks().forEach(track => stream.addTrack(track));
+    } catch { /* Camera is optional; keep the microphone and receive remote video. */ }
+  }
+  return stream;
 }
 
 export function useVoiceCall(uid: string | null) {
@@ -39,13 +47,20 @@ export function useVoiceCall(uid: string | null) {
   const [phase, setPhase] = useState<'idle' | 'preparing' | 'connecting' | 'connected'>('idle');
   const [error, setError] = useState<string | null>(null);
   const [muted, setMuted] = useState(false);
+  const [cameraOff, setCameraOff] = useState(false);
+  const [hasLocalCamera, setHasLocalCamera] = useState(false);
+  const [hasRemoteVideo, setHasRemoteVideo] = useState(false);
   const [playbackBlocked, setPlaybackBlocked] = useState(false);
   const [ringtoneBlocked, setRingtoneBlocked] = useState(false);
   const [micNotice, setMicNotice] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const localVideoRef = useRef<HTMLVideoElement>(null);
   const peer = useRef<RTCPeerConnection | null>(null);
   const localStream = useRef<MediaStream | null>(null);
-  const remoteTrack = useRef<MediaStreamTrack | null>(null);
+  const remoteStream = useRef<MediaStream | null>(null);
+  const remoteTracks = useRef<MediaStreamTrack[]>([]);
+  const activeMedia = useRef<CallMedia>('audio');
   const callRef = useRef<VoiceCallRecord | null>(null);
   const callId = useRef<string | null>(null);
   const outgoing = useRef<{ id: string; conversationId: string; otherUid: string } | null>(null);
@@ -64,12 +79,13 @@ export function useVoiceCall(uid: string | null) {
     peer.current = null;
     localStream.current?.getTracks().forEach(track => track.stop());
     localStream.current = null;
-    if (remoteTrack.current) {
-      remoteTrack.current.onmute = null;
-      remoteTrack.current.onunmute = null;
-      remoteTrack.current = null;
-    }
+    remoteTracks.current.forEach(track => { track.onmute = null; track.onunmute = null; });
+    remoteTracks.current = [];
+    remoteStream.current = null;
     if (audioRef.current) audioRef.current.srcObject = null;
+    if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
+    if (localVideoRef.current) localVideoRef.current.srcObject = null;
+    activeMedia.current = 'audio';
     callId.current = null;
     outgoing.current = null;
     queuedCandidates.current = [];
@@ -78,6 +94,9 @@ export function useVoiceCall(uid: string | null) {
     busy.current = false;
     setPhase('idle');
     setMuted(false);
+    setCameraOff(false);
+    setHasLocalCamera(false);
+    setHasRemoteVideo(false);
     setPlaybackBlocked(false);
   }, []);
 
@@ -107,37 +126,61 @@ export function useVoiceCall(uid: string | null) {
     queued.forEach(candidate => { void publishCandidate(candidate); });
   }, [publishCandidate]);
 
-  const preparePeer = useCallback(async () => {
-    if (!window.RTCPeerConnection) throw new Error('This browser does not support voice calls. Try a current browser.');
-    const stream = await captureMicrophone();
+  const preparePeer = useCallback(async (media: CallMedia) => {
+    if (!window.RTCPeerConnection) throw new Error('This browser does not support calls. Try a current browser.');
+    const stream = await captureMedia(media);
     try {
       const rtc = new RTCPeerConnection({ iceServers: await iceServers() });
       localStream.current = stream;
+      activeMedia.current = media;
       peer.current = rtc;
-      stream.getAudioTracks().forEach(track => rtc.addTrack(track, stream));
+      setHasLocalCamera(stream.getVideoTracks().length > 0);
+      stream.getTracks().forEach(track => rtc.addTrack(track, stream));
+      if (media === 'video' && stream.getVideoTracks().length === 0) rtc.addTransceiver('video', { direction: 'recvonly' });
+      if (localVideoRef.current && media === 'video') localVideoRef.current.srcObject = stream;
       rtc.onicecandidate = event => { if (peer.current === rtc && event.candidate) void publishCandidate(event.candidate.toJSON()); };
       rtc.ontrack = event => {
-        if (event.track.kind !== 'audio') return;
-        remoteTrack.current = event.track;
-        const audio = audioRef.current;
-        if (!audio) return;
-        // Use the track itself: some mobile browsers supply an empty streams array.
-        audio.srcObject = new MediaStream([event.track]);
-        audio.muted = false;
-        audio.volume = 1;
+        // Some mobile browsers provide no streams on the track event.
+        const mediaStream = remoteStream.current ?? new MediaStream();
+        remoteStream.current = mediaStream;
+        if (!remoteTracks.current.includes(event.track)) {
+          remoteTracks.current.push(event.track);
+          mediaStream.addTrack(event.track);
+        }
+        if (event.track.kind === 'video') {
+          setHasRemoteVideo(true);
+          event.track.onmute = () => setHasRemoteVideo(false);
+        }
+        const player = media === 'video' ? remoteVideoRef.current : audioRef.current;
+        if (!player) return;
+        player.srcObject = mediaStream;
+        player.muted = false;
+        player.volume = 1;
         const resume = () => {
-          void audio.play().then(() => setPlaybackBlocked(false)).catch(() => setPlaybackBlocked(true));
+          void player.play().then(() => setPlaybackBlocked(false)).catch(() => setPlaybackBlocked(true));
         };
-        event.track.onunmute = resume;
+        event.track.onunmute = () => {
+          if (event.track.kind === 'video') setHasRemoteVideo(true);
+          resume();
+        };
         resume();
       };
       rtc.onconnectionstatechange = () => {
         if (rtc.connectionState === 'connected') setPhase('connected');
-        if (rtc.connectionState === 'failed') setError('Audio connection failed. Try calling again.');
+        if (rtc.connectionState === 'failed') setError('Call connection failed. Try calling again.');
       };
       return rtc;
     } catch (e) { stream.getTracks().forEach(track => track.stop()); throw e; }
   }, [publishCandidate]);
+
+  useEffect(() => {
+    if (!call || call.media !== 'video') return;
+    if (localVideoRef.current && localStream.current) localVideoRef.current.srcObject = localStream.current;
+    if (remoteVideoRef.current && remoteStream.current) {
+      remoteVideoRef.current.srcObject = remoteStream.current;
+      void remoteVideoRef.current.play().then(() => setPlaybackBlocked(false)).catch(() => setPlaybackBlocked(true));
+    }
+  }, [call, hasLocalCamera]);
 
   const processCall = useCallback(async (active: VoiceCallRecord) => {
     const rtc = peer.current;
@@ -221,16 +264,16 @@ export function useVoiceCall(uid: string | null) {
     return () => { window.removeEventListener('pagehide', leave); leave(); };
   }, [uid]);
 
-  const start = useCallback(async (conversationId: string, otherUid: string) => {
+  const start = useCallback(async (conversationId: string, otherUid: string, media: CallMedia = 'audio') => {
     if (!uid || busy.current || callIsLive(callRef.current)) return;
     soundPlayer().unlock();
     busy.current = true;
     setPhase('preparing'); setError(null); setMicNotice(null);
     try {
-      const rtc = await preparePeer();
+      const rtc = await preparePeer(media);
       const offer = await rtc.createOffer();
       await rtc.setLocalDescription(offer);
-      const data = await signal('start', { conversationId, otherUid, offer: { type: 'offer', sdp: offer.sdp } });
+      const data = await signal('start', { conversationId, otherUid, media, offer: { type: 'offer', sdp: offer.sdp } });
       callId.current = data.callId;
       outgoing.current = { id: data.callId, conversationId, otherUid };
       setPhase('connecting');
@@ -247,7 +290,7 @@ export function useVoiceCall(uid: string | null) {
     busy.current = true;
     setPhase('preparing'); setError(null); setMicNotice(null);
     try {
-      const rtc = await preparePeer();
+      const rtc = await preparePeer(active.media ?? 'audio');
       callId.current = active.id;
       await rtc.setRemoteDescription(active.offer);
       const answer = await rtc.createAnswer();
@@ -277,12 +320,19 @@ export function useVoiceCall(uid: string | null) {
     setMuted(!track.enabled);
   }, []);
 
+  const toggleCamera = useCallback(() => {
+    const track = localStream.current?.getVideoTracks()[0];
+    if (!track) return;
+    track.enabled = !track.enabled;
+    setCameraOff(!track.enabled);
+  }, []);
+
   const playAudio = useCallback(() => {
-    const audio = audioRef.current;
-    if (!audio?.srcObject) { setError('No audio has arrived from the other phone yet.'); return; }
-    audio.muted = false;
-    audio.volume = 1;
-    void audio.play().then(() => setPlaybackBlocked(false)).catch(() => setPlaybackBlocked(true));
+    const player = activeMedia.current === 'video' ? remoteVideoRef.current : audioRef.current;
+    if (!player?.srcObject) { setError('No audio has arrived from the other phone yet.'); return; }
+    player.muted = false;
+    player.volume = 1;
+    void player.play().then(() => setPlaybackBlocked(false)).catch(() => setPlaybackBlocked(true));
   }, []);
 
   const enableRingtone = useCallback(() => {
@@ -295,7 +345,7 @@ export function useVoiceCall(uid: string | null) {
   const checkMicrophone = useCallback(async () => {
     setError(null); setMicNotice(null);
     try {
-      const stream = await captureMicrophone();
+      const stream = await captureMedia('audio');
       stream.getTracks().forEach(track => track.stop());
       setMicNotice('Microphone is ready. Tap Call or Answer.');
     } catch (e) {
@@ -303,5 +353,5 @@ export function useVoiceCall(uid: string | null) {
     }
   }, []);
 
-  return { call, phase, error, micNotice, muted, playbackBlocked, ringtoneBlocked, audioRef, start, accept, end, toggleMute, playAudio, enableRingtone, checkMicrophone, clearError: () => setError(null), clearMicNotice: () => setMicNotice(null) };
+  return { call, phase, error, micNotice, muted, cameraOff, hasLocalCamera, hasRemoteVideo, playbackBlocked, ringtoneBlocked, audioRef, remoteVideoRef, localVideoRef, start, accept, end, toggleMute, toggleCamera, playAudio, enableRingtone, checkMicrophone, clearError: () => setError(null), clearMicNotice: () => setMicNotice(null) };
 }

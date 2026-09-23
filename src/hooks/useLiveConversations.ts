@@ -161,6 +161,7 @@ export function useLiveConversations(uid: string | null): LiveConversations {
       setRaw(list);
       setLoading(false);
     };
+    const profileRefresh = window.setInterval(() => { if (!cancelled) void rebuild().catch(() => undefined); }, 20_000);
 
     const unsubReads = subscribeReads(
       uid,
@@ -267,6 +268,7 @@ export function useLiveConversations(uid: string | null): LiveConversations {
 
     return () => {
       cancelled = true;
+      window.clearInterval(profileRefresh);
       unsubReads();
       unsubDm();
       unsubGroups();

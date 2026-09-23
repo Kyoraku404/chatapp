@@ -33,8 +33,12 @@ export async function POST(req: Request) {
   const file = form?.get("file");
   const scope = form?.get("scope");
   const scopeId = form?.get("scopeId");
-  if (!(file instanceof File) || !["dm", "group", "space"].includes(String(scope)) || typeof scopeId !== "string")
+  if (!(file instanceof File) || !["dm", "group", "space", "avatar", "banner"].includes(String(scope)) || typeof scopeId !== "string")
     return NextResponse.json({ error: "Invalid upload." }, { status: 400 });
+  if ((scope === "avatar" || scope === "banner") && scopeId !== uid)
+    return NextResponse.json({ error: "You can only upload your own profile media." }, { status: 403 });
+  if ((scope === "avatar" || scope === "banner") && (!file.type.startsWith("image/") || file.size > (scope === "avatar" ? 5 : 8) * 1024 * 1024))
+    return NextResponse.json({ error: scope === "avatar" ? "Avatar must be an image under 5 MB." : "Banner must be an image under 8 MB." }, { status: 400 });
   const error = validateUpload(file.type, file.size);
   if (error) return NextResponse.json({ error }, { status: 400 });
   if (!await canAccessAttachment(db, uid, scope as AttachmentScope, scopeId))
@@ -42,7 +46,9 @@ export async function POST(req: Request) {
   const bytes = new Uint8Array(await file.arrayBuffer());
   if (!looksLike(file.type, bytes)) return NextResponse.json({ error: "File content does not match its type." }, { status: 400 });
   const id = randomUUID();
-  const storagePath = `attachments/${scope}/${scopeId}/${id}`;
+  // The deployed R2 gateway already permits avatars/{uid}/{randomKey}.
+  // Keep profile image kinds distinct in trusted metadata, not in the key.
+  const storagePath = scope === "avatar" || scope === "banner" ? `avatars/${uid}/${id}` : `attachments/${scope}/${scopeId}/${id}`;
   try {
     await r2.client.send(new PutObjectCommand({ Bucket: r2.bucket, Key: storagePath, Body: bytes, ContentType: file.type }));
     try {
@@ -56,7 +62,7 @@ export async function POST(req: Request) {
       .where("createdAt", "<", new Date(Date.now() - 24 * 60 * 60 * 1000)).limit(5).get().catch(() => null);
     for (const item of stale?.docs ?? []) {
       const old = item.data();
-      if (typeof old.storagePath !== "string" || !old.storagePath.startsWith("attachments/")) continue;
+      if (typeof old.storagePath !== "string" || (!old.storagePath.startsWith("attachments/") && !old.storagePath.startsWith("avatars/"))) continue;
       const claimed = await db.runTransaction(async tx => {
         const fresh = await tx.get(item.ref);
         if (!fresh.exists || fresh.data()?.used || fresh.data()?.deleting) return false;

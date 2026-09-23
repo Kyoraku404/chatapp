@@ -14,7 +14,7 @@ let snapshot: (value: { exists: () => boolean; data: () => VoiceCallRecord }) =>
 let voice: ReturnType<typeof useVoiceCall>;
 let tree: ReactTestRenderer;
 let sent: Array<{ action: string; [key: string]: unknown }>;
-let tracks: Array<{ enabled: boolean; stop: ReturnType<typeof vi.fn> }>;
+let tracks: Array<{ kind: 'audio' | 'video'; enabled: boolean; stop: ReturnType<typeof vi.fn> }>;
 let peers: FakePeer[];
 let emitEarlyCandidate: boolean;
 const call: VoiceCallRecord = {
@@ -31,7 +31,10 @@ class FakePeer {
   added: RTCIceCandidateInit[] = [];
   close = vi.fn();
   constructor() { peers.push(this); }
-  addTrack() { return {}; }
+  addedTracks: Array<{ kind: 'audio' | 'video' }> = [];
+  transceivers: Array<{ kind: string; direction: string }> = [];
+  addTrack(track: { kind: 'audio' | 'video' }) { this.addedTracks.push(track); return {}; }
+  addTransceiver(kind: string, options: { direction: string }) { this.transceivers.push({ kind, direction: options.direction }); return {}; }
   async createOffer() { return {type:'offer',sdp:'v=0\r\n'} as RTCSessionDescriptionInit; }
   async createAnswer() { return {type:'answer',sdp:'v=0\r\n'} as RTCSessionDescriptionInit; }
   async setLocalDescription(v: RTCSessionDescriptionInit) {
@@ -47,11 +50,19 @@ beforeEach(async () => {
   Object.values(tones).forEach(mock => mock.mockClear());
   mocks.onSnapshot.mockImplementation((_ref, cb) => {snapshot=cb;return () => {};});
   vi.stubGlobal('RTCPeerConnection', FakePeer);
-  vi.stubGlobal('MediaStream', class { constructor(public tracks: unknown[]) {} });
+  vi.stubGlobal('MediaStream', class { tracks: unknown[]; constructor(tracks: unknown[] = []) { this.tracks = tracks; } addTrack(track: unknown) { this.tracks.push(track); } });
   vi.stubGlobal('window', { RTCPeerConnection: FakePeer, addEventListener: vi.fn(), removeEventListener: vi.fn(), setInterval, clearInterval });
-  vi.stubGlobal('navigator', { mediaDevices: { getUserMedia: vi.fn(async () => {
-    const track={enabled:true,stop:vi.fn()}; tracks.push(track);
-    return {getTracks:()=>[track],getAudioTracks:()=>[track]};
+  vi.stubGlobal('navigator', { mediaDevices: { getUserMedia: vi.fn(async (constraints: MediaStreamConstraints) => {
+    const ownTracks: typeof tracks = [];
+    if (constraints.audio) ownTracks.push({kind:'audio',enabled:true,stop:vi.fn()});
+    if (constraints.video) ownTracks.push({kind:'video',enabled:true,stop:vi.fn()});
+    tracks.push(...ownTracks);
+    return {
+      getTracks:()=>ownTracks,
+      getAudioTracks:()=>ownTracks.filter(track=>track.kind==='audio'),
+      getVideoTracks:()=>ownTracks.filter(track=>track.kind==='video'),
+      addTrack:(track: typeof tracks[number])=>ownTracks.push(track),
+    };
   }) } });
   vi.stubGlobal('fetch', vi.fn(async (url:string, options?:{body?:string}) => {
     if (url.endsWith('/ice')) return {ok:true,json:async()=>({iceServers:[]})};
@@ -106,6 +117,73 @@ describe('WebRTC call lifecycle', () => {
     await act(async()=>snapshot({exists:()=>true,data:()=>({...call,status:'ended'})}));
     expect(tracks[0].stop).toHaveBeenCalled();
     expect(voice.call).toBeNull();
+  });
+  it('offers a video call with camera and microphone, toggles the camera, and releases both tracks', async () => {
+    await act(async()=>{tree=create(createElement(Harness,{uid:'a'}));});
+    await act(async()=>{await voice.start('dm_a_b','b','video');});
+    expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledWith(expect.objectContaining({video:false,audio:expect.any(Object)}));
+    expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledWith(expect.objectContaining({video:expect.any(Object),audio:false}));
+    expect(peers[0].addedTracks.map(track=>track.kind)).toEqual(['audio','video']);
+    expect(sent.find(x=>x.action==='start')?.media).toBe('video');
+    act(()=>voice.toggleCamera());
+    expect(tracks[1].enabled).toBe(false);
+    expect(voice.cameraOff).toBe(true);
+    await act(async()=>{await voice.end();});
+    expect(tracks[0].stop).toHaveBeenCalled();
+    expect(tracks[1].stop).toHaveBeenCalled();
+  });
+  it('answers an incoming video call with both media tracks', async () => {
+    await act(async()=>{tree=create(createElement(Harness,{uid:'b'}));});
+    await act(async()=>snapshot({exists:()=>true,data:()=>({...call,media:'video'})}));
+    await act(async()=>{await voice.accept();});
+    expect(peers[0].addedTracks.map(track=>track.kind)).toEqual(['audio','video']);
+    expect(sent.some(x=>x.action==='answer')).toBe(true);
+  });
+  it('starts a video call without a camera and still offers to receive the other side’s video', async () => {
+    await act(async()=>{tree=create(createElement(Harness,{uid:'a'}));});
+    vi.mocked(navigator.mediaDevices.getUserMedia).mockReset();
+    vi.mocked(navigator.mediaDevices.getUserMedia).mockImplementationOnce(async () => {
+      const audio={kind:'audio' as const,enabled:true,stop:vi.fn()}; tracks.push(audio);
+      return {getTracks:()=>[audio],getAudioTracks:()=>[audio],getVideoTracks:()=>[],addTrack:vi.fn()} as unknown as MediaStream;
+    }).mockRejectedValueOnce(new DOMException('No camera', 'NotFoundError'));
+    await act(async()=>{await voice.start('dm_a_b','b','video');});
+    expect(voice.error).toBeNull();
+    expect(voice.hasLocalCamera).toBe(false);
+    expect(peers[0].addedTracks.map(track=>track.kind)).toEqual(['audio']);
+    expect(peers[0].transceivers).toEqual([{kind:'video',direction:'recvonly'}]);
+    expect(sent.find(x=>x.action==='start')?.media).toBe('video');
+    await act(async()=>{await voice.end();});
+    expect(tracks[0].stop).toHaveBeenCalled();
+  });
+  it('answers a video call without a camera, leaving voice available', async () => {
+    await act(async()=>{tree=create(createElement(Harness,{uid:'b'}));});
+    await act(async()=>snapshot({exists:()=>true,data:()=>({...call,media:'video'})}));
+    vi.mocked(navigator.mediaDevices.getUserMedia).mockImplementationOnce(async () => {
+      const audio={kind:'audio' as const,enabled:true,stop:vi.fn()}; tracks.push(audio);
+      return {getTracks:()=>[audio],getAudioTracks:()=>[audio],getVideoTracks:()=>[],addTrack:vi.fn()} as unknown as MediaStream;
+    }).mockRejectedValueOnce(new DOMException('Camera denied', 'NotAllowedError'));
+    await act(async()=>{await voice.accept();});
+    expect(voice.error).toBeNull();
+    expect(peers[0].addedTracks.map(track=>track.kind)).toEqual(['audio']);
+    expect(peers[0].transceivers).toEqual([{kind:'video',direction:'recvonly'}]);
+    expect(sent.some(x=>x.action==='answer')).toBe(true);
+  });
+  it('plays remote video with its audio track and allows a mobile playback retry', async () => {
+    await act(async()=>{tree=create(createElement(Harness,{uid:'a'}));});
+    await act(async()=>{await voice.start('dm_a_b','b','video');});
+    const video = {srcObject:null as unknown, muted:true, volume:0, play:vi.fn(async()=>{})};
+    (voice.remoteVideoRef as {current: unknown}).current=video;
+    const videoTrack = {kind:'video', onmute:null, onunmute:null as (()=>void)|null};
+    const audioTrack = {kind:'audio', onmute:null, onunmute:null as (()=>void)|null};
+    await act(async()=>{
+      (peers[0].ontrack as (event: {track: typeof videoTrack})=>void)({track:videoTrack});
+      (peers[0].ontrack as (event: {track: typeof audioTrack})=>void)({track:audioTrack});
+    });
+    expect(video.srcObject).toBeTruthy();
+    expect(video.muted).toBe(false);
+    expect((video.srcObject as {tracks: unknown[]}).tracks).toEqual([videoTrack,audioTrack]);
+    await act(async()=>voice.playAudio());
+    expect(video.play).toHaveBeenCalledTimes(3);
   });
   it('rings an incoming call and stops the ringtone when answered', async () => {
     await act(async()=>{tree=create(createElement(Harness,{uid:'b'}));});

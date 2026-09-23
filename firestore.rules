@@ -65,30 +65,14 @@ service cloud.firestore {
     match /users/{userId} {
       // Public profile readable by any signed-in user (needed to find people).
       allow read: if signedIn();
-      // Own profile create only. username must equal usernameLower (all
-      // valid usernames are lowercase; the Admin reservation API enforces
-      // normalization + uniqueness transactionally).
-      allow create: if signedIn() && uid() == userId
-        && request.resource.data.uid == uid()
-        && request.resource.data.username is string
-        && request.resource.data.usernameLower is string
-        && request.resource.data.username == request.resource.data.usernameLower
-        && displayNameOk(request.resource.data)
-        && bioOk(request.resource.data)
-        && avatarUrlOk(request.resource.data);
-      // Own profile update only; uid/username/usernameLower immutable.
-      allow update: if signedIn() && uid() == userId
-        && request.resource.data.uid == resource.data.uid
-        && request.resource.data.username == resource.data.username
-        && request.resource.data.usernameLower == resource.data.usernameLower
-        && displayNameOk(request.resource.data)
-        && bioOk(request.resource.data)
-        && avatarUrlOk(request.resource.data);
-      allow delete: if false;
+      // Profile writes, including username reservations and R2 references,
+      // are handled transactionally by session-verified Admin APIs.
+      allow create, update, delete: if false;
 
       // Private per-user data (settings, block list edges readable by owner).
       match /private/{docId} {
-        allow read, write: if signedIn() && uid() == userId;
+        allow read: if signedIn() && uid() == userId;
+        allow write: if signedIn() && uid() == userId && docId != 'profileSettings';
       }
       // Per-conversation read state.
       match /reads/{convId} {

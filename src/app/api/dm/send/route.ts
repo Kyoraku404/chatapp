@@ -8,6 +8,7 @@ import { canDirectMessage } from "@/lib/blocking";
 import { sanitizePreview, validateMessageContent } from "@/lib/validation";
 import { extractMentionCandidates } from "@/lib/mentions";
 import { attachmentId } from "@/lib/attachmentAccess";
+import { canReceiveDm } from "@/lib/profilePrivacy";
 
 // POST /api/dm/send { conversationId, otherUid, content, replyTo?, attachment? }
 // Server-authoritative DM write: creates the deterministic parent on first
@@ -89,6 +90,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid attachment." }, { status: 400 });
 
   const convoRef = db.doc(`conversations/${conversationId}`);
+  if (!(await convoRef.get()).exists && !await canReceiveDm(db, otherUid))
+    return NextResponse.json({ error: "This user is not accepting new direct messages." }, { status: 403 });
   if (body.clientId != null && (typeof body.clientId !== 'string' || !/^[A-Za-z0-9_-]{16,100}$/.test(body.clientId)))
     return NextResponse.json({ error: 'Invalid message ID.' }, { status: 400 });
   const msgRef = body.clientId ? convoRef.collection("messages").doc(body.clientId) : convoRef.collection("messages").doc();

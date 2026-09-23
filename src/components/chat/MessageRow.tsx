@@ -1,5 +1,6 @@
 import { memo, useId, useState } from 'react';
 import { Avatar } from '@/components/Presence';
+import Link from 'next/link';
 import { MessageStatus } from './MessageStatus';
 import type { DemoMessage } from '@/lib/demo';
 type Actions = { reply: (m: DemoMessage) => void; retry: (id: string) => void; edit?: (id: string, content: string) => Promise<void>; remove?: (id: string) => Promise<void> };
@@ -28,9 +29,9 @@ export const MessageRow = memo(function MessageRow({ m, startRun, endRun, action
   }
 
   return <div className={`flex gap-2.5 ${startRun ? 'mt-4' : 'mt-1'} ${own ? 'flex-row-reverse' : ''}`}>
-    {!own && <div className="w-8 shrink-0">{startRun && <Avatar name={m.sender} size={32} src={m.senderAvatarUrl ?? null} />}</div>}
+    {!own && <div className="w-8 shrink-0">{startRun && (m.senderUsername ? <Link href={`/u/${m.senderUsername}`} aria-label={`View ${m.sender}'s profile`}><Avatar name={m.sender} size={32} src={m.senderAvatarUrl ?? null} /></Link> : <Avatar name={m.sender} size={32} src={m.senderAvatarUrl ?? null} />)}</div>}
     <div className={`flex min-w-0 max-w-[78%] flex-col ${own ? 'items-end' : 'items-start'}`}>
-      {!own && startRun && <span className="mb-1 px-1 text-xs font-semibold text-ink-500">{m.sender}</span>}
+      {!own && startRun && (m.senderUsername ? <Link href={`/u/${m.senderUsername}`} className="mb-1 px-1 text-xs font-semibold text-ink-500 hover:underline">{m.sender}</Link> : <span className="mb-1 px-1 text-xs font-semibold text-ink-500">{m.sender}</span>)}
                   <div key={m.id} data-message-id={!m.pending && !m.failed ? m.id : undefined} className={`group relative max-w-full ${m.entrance ? `message-enter-${m.entrance}` : ""}`}>
                     {m.replyTo && (
                       <div className={`mb-1 truncate rounded-lg border-l-2 border-rush-400 bg-ink-50 px-2 py-1 text-xs text-ink-500 ${own ? "text-right" : ""}`}>

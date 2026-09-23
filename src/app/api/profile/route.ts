@@ -45,18 +45,15 @@ export async function POST(req: Request) {
       if (userSnap.exists && userSnap.data()?.usernameLower && userSnap.data()?.usernameLower !== uv.value) {
         throw new Error("USERNAME_LOCKED");
       }
-      tx.set(nameRef, { uid, createdAt: FieldValue.serverTimestamp() }, { merge: true });
-      tx.set(
-        userRef,
-        {
-          uid,
-          username: uv.value,
-          usernameLower: uv.value,
-          displayName: displayName.trim(),
-          createdAt: FieldValue.serverTimestamp(),
-        },
-        { merge: true },
-      );
+      if (!nameSnap.exists) tx.set(nameRef, { uid, createdAt: FieldValue.serverTimestamp() });
+      if (!userSnap.exists) tx.set(userRef, {
+        uid,
+        username: uv.value,
+        usernameLower: uv.value,
+        displayName: displayName.trim(),
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "";

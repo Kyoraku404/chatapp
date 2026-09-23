@@ -1,10 +1,10 @@
 import type { Firestore } from "firebase-admin/firestore";
 
-export type AttachmentScope = "dm" | "group" | "space" | "avatar";
+export type AttachmentScope = "dm" | "group" | "space" | "avatar" | "banner";
 
 export async function canAccessAttachment(db: Firestore, uid: string, scope: AttachmentScope, scopeId: string) {
   if (!/^[A-Za-z0-9_-]{1,180}$/.test(scopeId)) return false;
-  if (scope === "avatar") return true;
+  if (scope === "avatar" || scope === "banner") return true;
   if (scope === "dm") {
     const snap = await db.doc(`conversations/${scopeId}`).get();
     return snap.exists && snap.data()?.kind === "dm" && (snap.data()?.participants as string[] | undefined)?.includes(uid) === true;

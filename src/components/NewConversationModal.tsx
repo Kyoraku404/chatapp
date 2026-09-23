@@ -4,6 +4,7 @@
 // (or retrieve) the deterministic DM via POST /api/dm/open. No mock users.
 
 import { useState } from "react";
+import Link from "next/link";
 import { Modal } from "@/components/Modal";
 import { Avatar } from "@/components/Presence";
 import { useUserSearch, type UserHit } from "@/hooks/useUserSearch";
@@ -69,11 +70,11 @@ export function NewConversationModal({
         )}
         <ul className="space-y-1">
           {hits.map((h) => (
-            <li key={h.uid}>
+            <li key={h.uid} className="flex items-center gap-1">
               <button
                 onClick={() => openDm(h)}
                 disabled={opening != null}
-                className="flex w-full items-center gap-3 rounded-2xl px-3 py-2 text-left hover:bg-paper disabled:opacity-60"
+                className="flex min-w-0 flex-1 items-center gap-3 rounded-2xl px-3 py-2 text-left hover:bg-paper disabled:opacity-60"
               >
                 <Avatar name={h.displayName} size={36} src={h.avatarUrl ?? null} />
                 <span className="min-w-0 flex-1">
@@ -86,6 +87,7 @@ export function NewConversationModal({
                   <span className="rounded-xl bg-ink-900 px-3 py-1.5 text-xs font-semibold text-white">Chat</span>
                 )}
               </button>
+              <Link href={`/u/${h.username}`} className="shrink-0 rounded-xl px-2 py-2 text-xs font-semibold text-rush-700 hover:bg-paper">Profile</Link>
             </li>
           ))}
         </ul>

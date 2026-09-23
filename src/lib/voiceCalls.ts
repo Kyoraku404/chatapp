@@ -1,4 +1,5 @@
 export type CallStatus = 'ringing' | 'active' | 'ended' | 'declined';
+export type CallMedia = 'audio' | 'video';
 
 export interface VoiceCallRecord {
   id: string;
@@ -8,6 +9,7 @@ export interface VoiceCallRecord {
   callerName: string;
   calleeName: string;
   status: CallStatus;
+  media?: CallMedia;
   offer: { type: 'offer'; sdp: string };
   answer: { type: 'answer'; sdp: string } | null;
   remoteCandidates: RTCIceCandidateInit[];

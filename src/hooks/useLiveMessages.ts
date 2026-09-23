@@ -55,7 +55,7 @@ interface Pending {
 function docToUi(
   d: QueryDocumentSnapshot<DocumentData>,
   uid: string,
-  names: Map<string, { displayName: string; avatarUrl?: string | null }>,
+  names: Map<string, { displayName: string; username?: string; avatarUrl?: string | null }>,
 ): DemoMessage {
   const data = d.data();
   const senderId = String(data.senderId ?? "");
@@ -72,6 +72,7 @@ function docToUi(
     pending: d.metadata.hasPendingWrites,
     sender: senderName,
     senderId,
+    senderUsername: names.get(senderId)?.username,
     senderAvatarUrl: senderId === uid ? null : (names.get(senderId)?.avatarUrl ?? null),
     own: senderId === uid,
     content: deleted ? "" : String(data.content ?? ""),
@@ -94,7 +95,7 @@ export function useLiveMessages(
 ): LiveMessages {
   const [docs, setDocs] = useState<QueryDocumentSnapshot<DocumentData>[]>([]);
   const [docsScope, setDocsScope] = useState('');
-  const [names, setNames] = useState<Map<string, { displayName: string; avatarUrl?: string | null }>>(new Map());
+  const [names, setNames] = useState<Map<string, { displayName: string; username?: string; avatarUrl?: string | null }>>(new Map());
   const [pendings, setPendings] = useState<Pending[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -153,8 +154,8 @@ export function useLiveMessages(
         void getProfiles([...new Set([...senders, ...replySenders])])
           .then((m) => {
             if (cancelled) return;
-            const nm = new Map<string, { displayName: string; avatarUrl?: string | null }>();
-            for (const [k, v] of m) nm.set(k, { displayName: v.displayName, avatarUrl: v.avatarUrl ?? null });
+            const nm = new Map<string, { displayName: string; username?: string; avatarUrl?: string | null }>();
+            for (const [k, v] of m) nm.set(k, { displayName: v.displayName, username: v.username, avatarUrl: v.avatarUrl ?? null });
             setNames(nm);
           })
           .catch(() => undefined);
@@ -173,6 +174,16 @@ export function useLiveMessages(
     // getCol identity changes per conversation; convKey pins the subscription.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uid, convKey]);
+
+  useEffect(() => {
+    if (!uid || names.size === 0) return;
+    const refresh = window.setInterval(() => {
+      void getProfiles([...names.keys()]).then(profiles => {
+        setNames(new Map([...profiles].map(([id, p]) => [id, { displayName: p.displayName, username: p.username, avatarUrl: p.avatarUrl ?? null }])));
+      }).catch(() => undefined);
+    }, 20_000);
+    return () => window.clearInterval(refresh);
+  }, [uid, convKey, names]);
 
   // Drop optimistic rows once their server echo arrives.
   useEffect(() => {

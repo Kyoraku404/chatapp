@@ -102,8 +102,8 @@ export default function SettingsPage() {
           </section>
           <section className="rounded-3xl border border-ink-200 bg-white p-6 shadow-card" aria-label="Profile settings">
             <h2 className="font-display text-base font-semibold">Profile</h2>
-            <p className="mt-1 text-sm text-ink-500">Edit your display name, bio, and avatar.</p>
-            <Link href="/profile" className="mt-3 inline-block rounded-xl bg-ink-900 px-4 py-2 text-sm font-semibold text-white">Open profile</Link>
+            <p className="mt-1 text-sm text-ink-500">Customize your public profile, photos, status, links, and privacy.</p>
+            <Link href="/profile" className="mt-3 inline-block rounded-xl bg-ink-900 px-4 py-2 text-sm font-semibold text-white">Edit profile</Link>
           </section>
           <section className="rounded-3xl border border-ink-200 bg-white p-6 shadow-card" aria-label="Privacy settings">
             <h2 className="font-display text-base font-semibold">Privacy & blocked users</h2>
