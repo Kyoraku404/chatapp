@@ -5,7 +5,6 @@
 import { initializeApp, getApps, type FirebaseApp } from "firebase/app";
 import { getAuth, type Auth } from "firebase/auth";
 import { getFirestore, type Firestore } from "firebase/firestore";
-import { getStorage, type FirebaseStorage } from "firebase/storage";
 import { getDatabase, type Database } from "firebase/database";
 
 function config() {
@@ -43,11 +42,6 @@ export function firebaseAuth(): Auth | null {
 export function firebaseDb(): Firestore | null {
   const a = firebaseApp();
   return a ? getFirestore(a) : null;
-}
-
-export function firebaseStorage(): FirebaseStorage | null {
-  const a = firebaseApp();
-  return a ? getStorage(a) : null;
 }
 
 export function firebaseRtdb(): Database | null {

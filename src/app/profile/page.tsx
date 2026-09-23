@@ -26,6 +26,7 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingAvatar, setSavingAvatar] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
@@ -104,6 +105,10 @@ export default function ProfilePage() {
     setError(null);
     setSaved(false);
     try {
+      if (avatarUrl?.startsWith("/api/attachments/media?")) {
+        const removed = await fetch("/api/profile/avatar", { method: "DELETE" });
+        if (!removed.ok) throw new Error("Could not replace uploaded avatar.");
+      }
       await updateDoc(doc(db, "users", uid), { avatarUrl: v });
       setAvatarUrl(v);
       setSaved(true);
@@ -121,7 +126,8 @@ export default function ProfilePage() {
     setError(null);
     setSaved(false);
     try {
-      await updateDoc(doc(db, "users", uid), { avatarUrl: null });
+      const response = await fetch("/api/profile/avatar", { method: "DELETE" });
+      if (!response.ok) throw new Error("Could not remove avatar.");
       setAvatarUrl(null);
       setAvatarInput("");
       setSaved(true);
@@ -130,6 +136,24 @@ export default function ProfilePage() {
     } finally {
       setSavingAvatar(false);
     }
+  }
+
+  async function uploadAvatar(file: File | undefined) {
+    if (!file) return;
+    setUploadingAvatar(true);
+    setError(null);
+    try {
+      const form = new FormData();
+      form.set("file", file);
+      const response = await fetch("/api/profile/avatar", { method: "POST", body: form });
+      const result = await response.json() as { avatarUrl?: string; error?: string };
+      if (!response.ok || !result.avatarUrl) throw new Error(result.error || "Could not upload avatar.");
+      setAvatarUrl(result.avatarUrl);
+      setAvatarInput("");
+      setSaved(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not upload avatar.");
+    } finally { setUploadingAvatar(false); }
   }
 
   return (
@@ -158,11 +182,16 @@ export default function ProfilePage() {
                 <div>
                   <h1 className="font-display text-2xl font-bold tracking-tight">Your profile</h1>
                   <p className="mt-1 text-xs text-ink-500">
-                    Free V1 avatars use an image URL — no uploads, no Storage needed.
+                    Upload a profile image or use a link.
                   </p>
                 </div>
               </div>
               <div className="mt-4 rounded-2xl border border-ink-200 bg-paper p-4">
+                <label className="mb-3 block text-xs font-semibold text-ink-700">
+                  Upload profile image
+                  <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" disabled={uploadingAvatar} onChange={(e) => void uploadAvatar(e.target.files?.[0])} className="mt-2 block w-full text-sm" />
+                </label>
+                {uploadingAvatar && <p className="mb-3 text-xs text-ink-500">Uploading avatar…</p>}
                 <label htmlFor="profile-avatar" className="text-xs font-semibold text-ink-700">
                   Avatar image URL (https://)
                 </label>

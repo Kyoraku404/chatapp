@@ -1,9 +1,6 @@
-// Attachment uploads: validated client-side AND by storage.rules.
-// Returns metadata for the message doc plus a renderable download URL.
+"use client";
 
-import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
-import { firebaseStorage } from "./firebaseClient";
-import { attachmentPath, validateUpload } from "./validation";
+import { validateUpload } from "./validation";
 
 export interface UploadedAttachment {
   storagePath: string;
@@ -13,20 +10,32 @@ export interface UploadedAttachment {
 }
 
 export async function uploadAttachment(
-  scope: "attachments/dm" | "attachments/group" | "attachments/space",
+  scope: "dm" | "group" | "space",
   scopeId: string,
   file: File,
+  onProgress?: (percent: number) => void,
 ): Promise<UploadedAttachment> {
   const err = validateUpload(file.type, file.size);
   if (err) throw new Error(err);
-  const storage = firebaseStorage();
-  if (!storage) throw new Error("Storage is not configured.");
-  const ext = (file.name.split(".").pop() ?? "bin").slice(0, 5);
-  // Random client message key keeps the path unguessable; the real message
-  // doc references this exact storagePath.
-  const key = `pending-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-  const path = attachmentPath(scope, scopeId, key, ext);
-  const snap = await uploadBytes(ref(storage, path), file, { contentType: file.type });
-  const url = await getDownloadURL(snap.ref);
-  return { storagePath: path, contentType: file.type, sizeBytes: file.size, url };
+  const form = new FormData();
+  form.set("scope", scope);
+  form.set("scopeId", scopeId);
+  form.set("file", file);
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/attachments/upload");
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) onProgress?.(Math.min(95, Math.round(event.loaded / event.total * 95)));
+    };
+    xhr.onerror = () => reject(new Error("Upload failed. Check your connection and retry."));
+    xhr.onload = () => {
+      let body: { error?: string; attachment?: UploadedAttachment } = {};
+      try { body = JSON.parse(xhr.responseText); } catch { /* handled below */ }
+      if (xhr.status >= 200 && xhr.status < 300 && body.attachment) {
+        onProgress?.(100);
+        resolve(body.attachment);
+      } else reject(new Error(body.error || "Upload failed. Please retry."));
+    };
+    xhr.send(form);
+  });
 }

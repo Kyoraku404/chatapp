@@ -7,6 +7,7 @@ import { dmConversationId } from "@/lib/dm";
 import { canDirectMessage } from "@/lib/blocking";
 import { sanitizePreview, validateMessageContent } from "@/lib/validation";
 import { extractMentionCandidates } from "@/lib/mentions";
+import { attachmentId } from "@/lib/attachmentAccess";
 
 // POST /api/dm/send { conversationId, otherUid, content, replyTo?, attachment? }
 // Server-authoritative DM write: creates the deterministic parent on first
@@ -28,7 +29,7 @@ export async function POST(req: Request) {
     otherUid?: string;
     content?: string;
     replyTo?: { messageId?: string; senderId?: string; preview?: string } | null;
-    attachment?: { storagePath?: string; contentType?: string; sizeBytes?: number; url?: string } | null;
+    attachment?: { storagePath?: string; contentType?: string; sizeBytes?: number } | null;
   };
   const { conversationId, otherUid } = body;
   const content = typeof body.content === "string" ? body.content : "";
@@ -78,19 +79,20 @@ export async function POST(req: Request) {
           preview: String(body.replyTo.preview ?? "").slice(0, 80),
         }
       : null;
-  const attachment = body.attachment
-    ? {
-        storagePath: String(body.attachment.storagePath ?? "").slice(0, 500),
-        contentType: String(body.attachment.contentType ?? "").slice(0, 127),
-        sizeBytes: Number(body.attachment.sizeBytes ?? 0),
-        ...(body.attachment.url ? { url: String(body.attachment.url).slice(0, 2048) } : {}),
-      }
-    : null;
+  const attachment = body.attachment ? {
+    storagePath: String(body.attachment.storagePath ?? ""),
+    contentType: String(body.attachment.contentType ?? ""),
+    sizeBytes: Number(body.attachment.sizeBytes ?? 0),
+  } : null;
+  const uploadId = attachment ? attachmentId(attachment.storagePath) : null;
+  if (attachment && (!uploadId || !attachment.storagePath.startsWith(`attachments/dm/${conversationId}/`)))
+    return NextResponse.json({ error: "Invalid attachment." }, { status: 400 });
 
   const convoRef = db.doc(`conversations/${conversationId}`);
   if (body.clientId != null && (typeof body.clientId !== 'string' || !/^[A-Za-z0-9_-]{16,100}$/.test(body.clientId)))
     return NextResponse.json({ error: 'Invalid message ID.' }, { status: 400 });
   const msgRef = body.clientId ? convoRef.collection("messages").doc(body.clientId) : convoRef.collection("messages").doc();
+  const uploadRef = uploadId ? db.doc(`r2Uploads/${uploadId}`) : null;
   // Per-user unread counters for the sidebar badges. Recipient +1, sender
   // reset to 0 (sending means you have seen the thread tip). Both writes
   // are Admin-side inside this same transaction: no client can set another
@@ -105,6 +107,13 @@ export async function POST(req: Request) {
       if (existing.exists) {
         if (existing.data()?.senderId !== uid) throw new Error('NOT_PARTICIPANT');
         return; // Lost HTTP responses and retries must not increment unread twice.
+      }
+      if (uploadRef && attachment) {
+        const upload = await tx.get(uploadRef);
+        const metadata = upload.data();
+        if (!upload.exists || metadata?.ownerId !== uid || metadata?.scope !== "dm" || metadata?.scopeId !== conversationId || metadata?.storagePath !== attachment.storagePath || metadata?.contentType !== attachment.contentType || metadata?.sizeBytes !== attachment.sizeBytes || metadata?.used || metadata?.deleting)
+          throw new Error("INVALID_ATTACHMENT");
+        tx.update(uploadRef, { used: true, messageId: msgRef.id, messagePath: msgRef.path });
       }
       if (!snap.exists) {
         const [a, b] = [uid, otherUid].sort();
@@ -150,6 +159,8 @@ export async function POST(req: Request) {
       );
     });
   } catch (e) {
+    if (e instanceof Error && e.message === "INVALID_ATTACHMENT")
+      return NextResponse.json({ error: "Attachment expired or invalid. Please upload again." }, { status: 400 });
     if (e instanceof Error && e.message === "NOT_PARTICIPANT")
       return NextResponse.json({ error: "Forbidden." }, { status: 403 });
     return NextResponse.json({ error: "Message could not be sent." }, { status: 500 });

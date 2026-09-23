@@ -66,18 +66,21 @@ export function validateAvatarUrl(raw: string): string | null {
 
 // ---- Storage upload validation (mirrors storage.rules) ----
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
-const FILE_TYPES = new Set<string>([...IMAGE_TYPES, "application/pdf"]);
+const VIDEO_TYPES = ["video/mp4", "video/webm", "video/quicktime"];
+const FILE_TYPES = new Set<string>([...IMAGE_TYPES, ...VIDEO_TYPES, "application/pdf"]);
 const IMAGE_SET = new Set<string>(IMAGE_TYPES);
+const VIDEO_SET = new Set<string>(VIDEO_TYPES);
 
 export const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 export const MAX_FILE_BYTES = 15 * 1024 * 1024;
+export const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
 
 export function validateUpload(
   contentType: string,
   sizeBytes: number,
 ): string | null {
   if (!FILE_TYPES.has(contentType)) return "File type is not allowed.";
-  const max = IMAGE_SET.has(contentType) ? MAX_IMAGE_BYTES : MAX_FILE_BYTES;
+  const max = IMAGE_SET.has(contentType) ? MAX_IMAGE_BYTES : VIDEO_SET.has(contentType) ? MAX_VIDEO_BYTES : MAX_FILE_BYTES;
   if (sizeBytes <= 0) return "File is empty.";
   if (sizeBytes > max) return "File is too large.";
   return null;

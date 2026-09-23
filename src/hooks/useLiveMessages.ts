@@ -61,7 +61,7 @@ function docToUi(
   const senderId = String(data.senderId ?? "");
   const deleted = data.deletedAt != null;
   const reply = (data.replyTo as { messageId?: string; senderId?: string; preview?: string } | null) ?? null;
-  const attachment = (data.attachment as { url?: string; contentType?: string } | null) ?? null;
+  const attachment = (data.attachment as { url?: string; storagePath?: string; contentType?: string } | null) ?? null;
   const ms = toMillis(data.createdAt);
   const senderName = senderId === uid ? "You" : (names.get(senderId)?.displayName ?? "Unknown user");
   const replySenderId = String(reply?.senderId ?? "");
@@ -79,7 +79,9 @@ function docToUi(
     replyTo: reply ? { sender: names.get(replySenderId)?.displayName ?? "Someone", preview: String(reply.preview ?? "") } : undefined,
     edited: data.editedAt != null,
     deleted,
-    attachmentUrl: attachment?.url ?? null,
+    attachmentUrl: attachment?.storagePath?.startsWith("attachments/")
+      ? `/api/attachments/media?id=${attachment.storagePath.split("/").at(-1)}`
+      : attachment?.url ?? null,
     attachmentType: attachment?.contentType ?? null,
   };
 }

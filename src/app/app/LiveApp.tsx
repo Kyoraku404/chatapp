@@ -9,7 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MobileNav } from '@/components/chat/MobileNav';
 import { useMobileViewport } from '@/hooks/useMobileViewport';
 import Link from "next/link";
-import { Phone } from 'lucide-react';
+import { Phone, Palette } from 'lucide-react';
 import { doc, onSnapshot } from "firebase/firestore";
 import { BrandMark } from "@/components/BrandMark";
 import { Avatar } from "@/components/Presence";
@@ -222,11 +222,11 @@ export function LiveApp() {
     await live.send(text, { replyTo, attachment });
   }
 
-  async function handleUpload(file: File): Promise<ComposerAttachment> {
+  async function handleUpload(file: File, onProgress?: (percent: number) => void): Promise<ComposerAttachment> {
     if (!sel) throw new Error("Open a conversation first.");
-    const scope = sel.kind === "dm" ? "attachments/dm" : sel.kind === "group" ? "attachments/group" : "attachments/space";
+    const scope = sel.kind === "dm" ? "dm" : sel.kind === "group" ? "group" : "space";
     const scopeId = sel.kind === "channel" ? sel.spaceId : sel.id;
-    return uploadAttachment(scope, scopeId, file);
+    return uploadAttachment(scope, scopeId, file, onProgress);
   }
 
   function openNew() {
@@ -569,6 +569,10 @@ export function LiveApp() {
                   {avatarBadge}
                 </Link>
               </div>
+            </div>
+            <div className="mobile-list-heading">
+              <h1>{rail}</h1>
+              <Link href="/settings#appearance" aria-label="Choose a theme"><Palette size={20} strokeWidth={1.7} /></Link>
             </div>
             <div className="min-h-0 flex-1">{riverContent}</div>
           </div>

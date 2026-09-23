@@ -90,9 +90,16 @@ export default function SettingsPage() {
       <header className="standalone-safe-top mx-auto flex max-w-3xl items-center justify-between px-6 pb-5">
         <Link href="/app" aria-label="Back to RUSH"><BrandMark /></Link>
       </header>
-      <main className="mx-auto max-w-3xl px-6 pb-16">
+      <main className="settings-page mx-auto max-w-3xl px-4 pb-16 sm:px-6">
         <h1 className="font-display text-2xl font-bold tracking-tight">Settings</h1>
-        <div className="mt-4 space-y-3">
+        <p className="mt-1 text-sm text-ink-500">Make RUSH feel like you.</p>
+        <div className="settings-sections mt-6">
+          <section id="appearance" className="appearance-section rounded-3xl border border-ink-200 bg-white p-4 shadow-card sm:p-6" aria-label="Appearance">
+            <h2 className="font-display text-base font-semibold">Appearance</h2>
+            <p className="mt-1 text-sm text-ink-500">Choose your colors. See the change instantly.</p>
+            <ThemeCards />
+            <p className="mt-2 text-xs text-ink-400">Motion respects your system reduced-motion setting.</p>
+          </section>
           <section className="rounded-3xl border border-ink-200 bg-white p-6 shadow-card" aria-label="Profile settings">
             <h2 className="font-display text-base font-semibold">Profile</h2>
             <p className="mt-1 text-sm text-ink-500">Edit your display name, bio, and avatar.</p>
@@ -124,12 +131,7 @@ export default function SettingsPage() {
               </ul>
             </div>
           </section>
-          <section className="rounded-3xl border border-ink-200 bg-white p-6 shadow-card" aria-label="Appearance">
-            <h2 className="font-display text-base font-semibold">Appearance</h2>
-            <p className="mt-1 text-sm text-ink-500">Pick a material. Carbon themes use layered graphite with a subtle woven texture — saved on this device.</p>
-            <ThemeCards />
-            <p className="mt-2 text-xs text-ink-400">Motion respects your system reduced-motion setting.</p>
-          </section>
+
           <section className="rounded-3xl border border-ink-200 bg-white p-6 shadow-card" aria-label="Session">
             <h2 className="font-display text-base font-semibold">Session</h2>
             <button

@@ -25,7 +25,7 @@ export function Composer({
   replyTo: DemoMessage | null;
   onClearReply: () => void;
   onSend: (text: string, attachment: ComposerAttachment | null) => Promise<void>;
-  onUploadFile?: (file: File) => Promise<ComposerAttachment>;
+  onUploadFile?: (file: File, onProgress?: (percent: number) => void) => Promise<ComposerAttachment>;
   attachDisabledReason?: string;
 }) {
   const [text, setText] = useState("");
@@ -33,6 +33,9 @@ export function Composer({
   const [error, setError] = useState<string | null>(null);
   const [attachment, setAttachment] = useState<ComposerAttachment | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const boxRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const composerId = useId();
@@ -46,10 +49,10 @@ export function Composer({
 
   async function submit() {
     const v = text.trim();
-    if ((!v && !attachment) || submitLock.current || uploading) return; // duplicate-send lock
+    if ((!v && !attachment) || (selectedFile && !attachment) || submitLock.current || uploading) return; // duplicate-send lock
     submitLock.current = true;
     setText('');
-    setAttachment(null);
+    clearAttachment(false);
     onClearReply();
     setError(null);
     try {
@@ -66,10 +69,14 @@ export function Composer({
 
   async function pick(file: File | undefined) {
     if (!file || !onUploadFile) return;
+    if (attachment || previewUrl) clearAttachment();
+    setSelectedFile(file);
+    setPreviewUrl(URL.createObjectURL(file));
     setUploading(true);
+    setProgress(0);
     setError(null);
     try {
-      setAttachment(await onUploadFile(file));
+      setAttachment(await onUploadFile(file, setProgress));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Upload failed.");
     } finally {
@@ -79,6 +86,16 @@ export function Composer({
   }
 
   const canAttach = Boolean(onUploadFile);
+  function clearAttachment(discard = true) {
+    if (discard && attachment?.storagePath) {
+      const id = attachment.storagePath.split("/").at(-1);
+      void fetch(`/api/attachments/upload?id=${encodeURIComponent(id ?? "")}`, { method: "DELETE" });
+    }
+    setAttachment(null);
+    setSelectedFile(null);
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(null);
+  }
 
   return (
     <div className="chat-composer shrink-0 border-t border-ink-100 bg-paper/80 px-4 pb-4 pt-2 backdrop-blur md:px-8">
@@ -93,17 +110,24 @@ export function Composer({
             </button>
           </div>
         )}
-        {attachment && (
+        {selectedFile && (
           <div className="mb-2 flex items-center gap-2 rounded-xl border border-ink-200 bg-white px-3 py-2 text-xs">
+            {previewUrl && selectedFile.type.startsWith("image/") && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={previewUrl} alt="Image preview" className="h-14 w-14 rounded-lg object-cover" />
+            )}
+            {previewUrl && selectedFile.type.startsWith("video/") && <video src={previewUrl} controls playsInline preload="metadata" className="h-20 max-w-[10rem] rounded-lg" />}
             <span className="truncate font-semibold text-ink-900">
-              {attachment.contentType.startsWith("image/") ? "Image attached" : "File attached"}
+              {selectedFile.name}
             </span>
-            <span className="text-ink-400">{Math.round(attachment.sizeBytes / 1024)} KB</span>
-            <button onClick={() => setAttachment(null)} aria-label="Remove attachment" className="ml-auto rounded-lg px-2 py-1 font-semibold text-ink-500 hover:bg-ink-100">
+            <span className="text-ink-400">{uploading ? `${progress}%` : attachment ? "Ready" : "Failed"}</span>
+            <button onClick={() => clearAttachment()} disabled={uploading} aria-label="Remove attachment" className="ml-auto rounded-lg px-2 py-1 font-semibold text-ink-500 hover:bg-ink-100 disabled:opacity-40">
               ✕
             </button>
           </div>
         )}
+        {uploading && <div role="progressbar" aria-label="Upload progress" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100} className="mb-2 h-1.5 overflow-hidden rounded-full bg-ink-100"><div className="h-full bg-rush-600 transition-[width]" style={{ width: `${progress}%` }} /></div>}
+        {error && selectedFile && !uploading && <button type="button" onClick={() => void pick(selectedFile)} className="mb-2 text-xs font-semibold text-rush-700 underline">Retry upload</button>}
         {error && (
           <div className="mb-2">
             <InlineError message={error} />
@@ -119,7 +143,7 @@ export function Composer({
           <input
             ref={fileRef}
             type="file"
-            accept="image/jpeg,image/png,image/webp,image/gif,application/pdf"
+            accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime,application/pdf"
             className="sr-only"
             aria-hidden="true"
             tabIndex={-1}
@@ -129,8 +153,8 @@ export function Composer({
             type="button"
             onClick={() => canAttach && fileRef.current?.click()}
             disabled={!canAttach || uploading}
-            aria-label={canAttach ? "Attach an image or PDF" : (attachDisabledReason ?? "Attachments unavailable")}
-            title={canAttach ? "Attach an image or PDF" : (attachDisabledReason ?? "Attachments unavailable")}
+            aria-label={canAttach ? "Attach an image, video or PDF" : (attachDisabledReason ?? "Attachments unavailable")}
+            title={canAttach ? "Attach an image, video or PDF" : (attachDisabledReason ?? "Attachments unavailable")}
             className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-ink-500 hover:bg-ink-100 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
@@ -154,11 +178,11 @@ export function Composer({
               }
             }}
             placeholder={uploading ? "Uploading…" : "Message…"}
-            className="max-h-32 min-h-[44px] flex-1 resize-none overflow-y-auto bg-transparent text-[14.5px] leading-relaxed outline-none placeholder:text-ink-400 disabled:opacity-60"
+            className="max-h-32 min-h-[44px] min-w-0 flex-1 resize-none overflow-y-auto bg-transparent text-[14.5px] leading-relaxed outline-none placeholder:text-ink-400 disabled:opacity-60"
           />
           <button
             type="submit"
-            disabled={(!text.trim() && !attachment) || uploading}
+            disabled={(!text.trim() && !attachment) || (Boolean(selectedFile) && !attachment) || uploading}
             aria-label="Send message"
             className="composer-send grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-rush-600 text-white shadow-rush-pop hover:bg-rush-700 disabled:opacity-40"
           >

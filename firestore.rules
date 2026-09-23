@@ -35,7 +35,8 @@ service cloud.firestore {
         || data.avatarUrl == null
         || (data.avatarUrl is string
           && data.avatarUrl.size() <= 2048
-          && (data.avatarUrl.matches('^https://.+')
+          && (data.avatarUrl.matches('^/api/attachments/media\\?id=[a-f0-9-]{36}$')
+            || data.avatarUrl.matches('^https://.+')
             || data.avatarUrl.matches('^http://localhost.*')
             || data.avatarUrl.matches('^http://127\\.0\\.0\\.1.*')));
     }

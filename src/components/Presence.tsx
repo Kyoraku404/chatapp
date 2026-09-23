@@ -56,7 +56,7 @@ export function Avatar({
   const clean = typeof src === "string" ? src.trim() : "";
   const hasSrc =
     clean.length > 0 &&
-    (/^https:\/\//i.test(clean) || /^http:\/\/(localhost|127\.0\.0\.1)/i.test(clean));
+    (/^https:\/\//i.test(clean) || /^http:\/\/(localhost|127\.0\.0\.1)/i.test(clean) || /^\/api\/attachments\/media\?id=[a-f0-9-]{36}$/.test(clean));
   return (
     <span className="relative inline-flex shrink-0" aria-hidden={presence ? undefined : true}>
       {hasSrc ? (
@@ -72,7 +72,7 @@ export function Avatar({
         />
       ) : (
         <span
-          className="grid place-items-center rounded-full bg-ink-800 font-display font-semibold text-white"
+          className="rush-avatar grid place-items-center rounded-full bg-ink-800 font-display font-semibold text-white"
           style={{ width: size, height: size, fontSize: size * 0.36 }}
           aria-label={presence ? undefined : name}
         >

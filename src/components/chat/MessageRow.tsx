@@ -71,7 +71,7 @@ export const MessageRow = memo(function MessageRow({ m, startRun, endRun, action
                       </div>
                     ) : (
                       <div
-                        className={`break-words rounded-2xl px-3.5 py-2 text-[14.5px] leading-[1.55] [overflow-wrap:anywhere] ${
+                        className={`message-bubble break-words rounded-2xl px-3.5 py-2 text-[14.5px] leading-[1.55] [overflow-wrap:anywhere] ${
                           own
                             ? "rounded-tr-md bg-rush-600 text-white shadow-rush-pop"
                             : "rounded-tl-md border border-ink-100 bg-white text-ink-900 shadow-card"
@@ -86,7 +86,10 @@ export const MessageRow = memo(function MessageRow({ m, startRun, endRun, action
                             loading="lazy"
                           />
                         )}
-                        {m.attachmentUrl && !m.attachmentType?.startsWith("image/") && (
+                        {m.attachmentUrl && m.attachmentType?.startsWith("video/") && (
+                          <video src={m.attachmentUrl} controls playsInline preload="metadata" className="mb-1.5 max-h-72 max-w-full rounded-xl" aria-label="Shared video" />
+                        )}
+                        {m.attachmentUrl && !m.attachmentType?.startsWith("image/") && !m.attachmentType?.startsWith("video/") && (
                           <a
                             href={m.attachmentUrl}
                             target="_blank"

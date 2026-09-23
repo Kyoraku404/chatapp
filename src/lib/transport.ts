@@ -36,7 +36,7 @@ export interface OutgoingMessage {
     storagePath: string;
     contentType: string;
     sizeBytes: number;
-    /** Renderable download URL (client-resolved at upload; informational). */
+    /** Only used for local optimistic preview; never stored in Firestore. */
     url?: string;
   } | null;
 }
@@ -113,10 +113,21 @@ export async function sendMessage(
     editedAt: null,
     deletedAt: null,
     replyTo: msg.replyTo ?? null,
-    attachment: msg.attachment ?? null,
+    attachment: msg.attachment ? {
+      storagePath: msg.attachment.storagePath,
+      contentType: msg.attachment.contentType,
+      sizeBytes: msg.attachment.sizeBytes,
+    } : null,
     mentions,
     });
   });
+  if (msg.attachment?.storagePath) {
+    const response = await fetch("/api/attachments/finalize", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: col.path, messageId: ref.id }),
+    });
+    if (!response.ok) throw new Error("File sent, but media could not be opened. Please refresh and retry.");
+  }
   return { ok: true, id: ref.id, preview: sanitizePreview(msg.content) };
 }
 
@@ -183,4 +194,9 @@ export async function deleteOwnMessage(
 ) {
   if (senderId !== currentSenderId) throw new Error("You can only delete your own messages.");
   await updateDoc(doc(col, messageId), { deletedAt: serverTimestamp(), content: "" });
+  const response = await fetch("/api/attachments/remove", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path: col.path, messageId }),
+  });
+  if (!response.ok) throw new Error("Message deleted, but its media cleanup needs a retry.");
 }

@@ -23,17 +23,21 @@ function installFakeDocument() {
 }
 
 describe("theme ids", () => {
-  it("accepts the four themes, rejects anything else", () => {
+  it("accepts the six themes, rejects anything else", () => {
     expect(isThemeId("ember")).toBe(true);
+    expect(isThemeId("glass")).toBe(true);
+    expect(isThemeId("dark-glass")).toBe(true);
     expect(isThemeId("carbon-green")).toBe(true);
     expect(isThemeId("carbon-pink")).toBe(true);
     expect(isThemeId("dark-samurai")).toBe(true);
     expect(isThemeId("matrix")).toBe(false);
     expect(isThemeId(null)).toBe(false);
-    expect(THEMES.map((t) => t.id)).toEqual(["ember", "carbon-green", "carbon-pink", "dark-samurai"]);
+    expect(THEMES.map((t) => t.id)).toEqual(["ember", "glass", "dark-glass", "carbon-green", "carbon-pink", "dark-samurai"]);
   });
   it("classifies dark themes for color-scheme", () => {
     expect(isDarkTheme("ember")).toBe(false);
+    expect(isDarkTheme("glass")).toBe(false);
+    expect(isDarkTheme("dark-glass")).toBe(true);
     expect(isDarkTheme("carbon-green")).toBe(true);
     expect(isDarkTheme("carbon-pink")).toBe(true);
     expect(isDarkTheme("dark-samurai")).toBe(true);
@@ -41,6 +45,8 @@ describe("theme ids", () => {
   it("defaults to Ember", () => {
     expect(DEFAULT_THEME).toBe("ember");
     expect(parseTheme("carbon-green")).toBe("carbon-green");
+    expect(parseTheme("glass")).toBe("glass");
+    expect(parseTheme("dark-glass")).toBe("dark-glass");
     expect(parseTheme("carbon-pink")).toBe("carbon-pink");
     expect(parseTheme("dark-samurai")).toBe("dark-samurai");
     expect(parseTheme("nope")).toBe("ember");
